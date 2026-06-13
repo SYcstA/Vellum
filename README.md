@@ -52,13 +52,6 @@ Independently draggable, resizable widgets for **To-Do**, **Notes**, **Calendar*
 ### Ghost Mode (Escape Hatch)
 Need to click *through* Vellum to interact with the desktop underneath? Toggle **Ghost Mode** from the title bar. The window becomes fully click-through — perfect for keeping a checklist visible while you work in another app. Press **`Alt + G`** at any time to instantly restore interactivity, so you can never lock yourself out.
 
-<!-- Ghost Mode demo (animated): 800×500, .gif -->
-<div align="center">
-
-![Ghost Mode](./docs/screenshot-ghost-mode.gif)
-
-</div>
-
 ### Persistent State
 Powered by `tauri-plugin-window-state`, Vellum remembers your **custom window size**, **widget positions**, **theme** (Dark Glass · Frosted Light · Pure Black), **opacity**, and **wallpaper** across every session. Quit, reopen — it's exactly where you left it.
 
@@ -125,7 +118,6 @@ All README images live in [`./docs/`](./docs/). To swap in your own screenshots,
 |---|---|---|
 | `screenshot-dashboard.png` | Hero shot of the full dashboard | 1600×1000 |
 | `screenshot-widgets.png` | Widgets close-up | 1400×900 |
-| `screenshot-ghost-mode.gif` | Ghost Mode demo loop | 800×500 |
 | `screenshot-themes.png` | Theme switcher side-by-side | 1600×600 |
 
 ---
