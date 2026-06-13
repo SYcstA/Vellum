@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* ── System-Native Glass: type system ────────────────────────────────────
+   Progressive enhancement: use Inter/Geist if the OS has them, otherwise fall
+   back to the native UI font (Segoe UI on Windows) — which is on-brand for a
+   "system-native" widget. Numeric/date data uses a mono stack with tabular figures. */
+@theme {
+  --font-sans: "Inter", "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.011em;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+}
+
+/* ── System-Native Glass: design tokens ─────────────────────────────────── */
+:root {
+  /* Layered strokes: a faint outer hairline + a brighter top highlight so the
+     panel edge catches light like real frosted glass. */
+  --glass-stroke: rgba(255, 255, 255, 0.10);
+  --glass-stroke-top: rgba(255, 255, 255, 0.22);
+  /* Weighted, lifted shadow — gives the panel mass instead of a flat float. */
+  --glass-shadow: 0 18px 44px -16px rgba(0, 0, 0, 0.62), 0 3px 10px -3px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Subtle noise overlay ────────────────────────────────────────────────
+   A barely-there fractal-noise film over each glass panel kills the flat,
+   generic "AI gradient" look and adds tactile grain. pointer-events:none so it
+   never blocks interaction; inherits the panel's radius. */
+.glass-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Snappy, native-feeling interactions ─────────────────────────────────
+   Short, OS-component-like timing. No long floaty easing. */
+button,
+a,
+[role="button"] {
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  transition-duration: 120ms;
+}
+
+/* ── Thin, unobtrusive scrollbars ────────────────────────────────────────── */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Tabular figures for any element tagged mono — keeps dates/numbers aligned. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Light-mode readability audit ────────────────────────────────────────
+   Widgets are authored dark-first (many hardcoded text-white / border-white /
+   bg-white utilities). In light mode the glass surface is near-white, so those
+   wash out. These scoped overrides (unlayered → they beat Tailwind utilities)
+   remap the dark-oriented utilities to dark ink / hairlines ONLY when
+   data-theme="light". Elements that already theme via tw() emit gray-* classes
+   and are left untouched, so there's no double-handling. */
+[data-theme="light"] input:not([type="range"]),
+[data-theme="light"] textarea {
+  color: #18181b;
+  background-color: rgba(0, 0, 0, 0.045);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+[data-theme="light"] input:not([type="range"])::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .text-white\/90 { color: rgba(0, 0, 0, 0.88); }
+[data-theme="light"] .text-white\/80 { color: rgba(0, 0, 0, 0.80); }
+[data-theme="light"] .text-white\/70 { color: rgba(0, 0, 0, 0.70); }
+[data-theme="light"] .text-white\/60 { color: rgba(0, 0, 0, 0.60); }
+[data-theme="light"] .text-white\/50 { color: rgba(0, 0, 0, 0.50); }
+[data-theme="light"] .text-white\/40 { color: rgba(0, 0, 0, 0.42); }
+[data-theme="light"] .text-white\/30 { color: rgba(0, 0, 0, 0.34); }
+
+[data-theme="light"] .bg-white\/5 { background-color: rgba(0, 0, 0, 0.035); }
+[data-theme="light"] .bg-white\/10 { background-color: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .hover\:bg-white\/10:hover { background-color: rgba(0, 0, 0, 0.07); }
+[data-theme="light"] .hover\:bg-white\/5:hover { background-color: rgba(0, 0, 0, 0.04); }
+
+[data-theme="light"] .border-white\/10 { border-color: rgba(0, 0, 0, 0.10); }
+[data-theme="light"] .border-white\/8 { border-color: rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .border-white\/5 { border-color: rgba(0, 0, 0, 0.06); }
+
+/* Accent text on faint tinted chips: the 200/300 stops are too light over a
+   near-white panel — drop to legible ~700 stops in light mode. */
+[data-theme="light"] .text-indigo-300,
+[data-theme="light"] .text-indigo-200 { color: #4338ca; }
+[data-theme="light"] .text-sky-300,
+[data-theme="light"] .text-sky-300\/70 { color: #0369a1; }
+[data-theme="light"] .text-amber-300,
+[data-theme="light"] .text-amber-300\/70 { color: #b45309; }
+[data-theme="light"] .text-emerald-300,
+[data-theme="light"] .text-emerald-300\/70 { color: #047857; }
+[data-theme="light"] .text-red-300 { color: #b91c1c; }

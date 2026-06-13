@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Background luar dibikin transparan biar bisa nempel di mana aja -->
+  <defs>
+    <!-- Efek gradasi halus biar kelihatan kayak kaca taktil -->
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85" />
+      <stop offset="100%" xstop-color="#ffffff" stop-opacity="0.25" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#94a3b8" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#f8fafc" stop-opacity="0.1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Ring: Tipis dan elegan ala instrument sistem -->
+  <circle cx="256" cy="256" r="220" fill="none" stroke="url(#glassGrad)" stroke-width="6" stroke-opacity="0.4" stroke-dasharray="300 40 20 40"/>
+
+  <!-- Layer 1: Sayap kiri Vellum (Lebih solid, di belakang) -->
+  <path d="M140 160 L230 380 L275 380 L185 160 Z" fill="#ffffff" fill-opacity="0.15" stroke="url(#glassGrad)" stroke-width="3" />
+
+  <!-- Layer 2: Sayap kanan Vellum (Transparan, tumpang tindih di depan) -->
+  <path d="M372 160 L282 380 L237 380 L327 160 Z" fill="url(#accentGrad)" fill-opacity="0.2" stroke="#ffffff" stroke-width="4" stroke-opacity="0.9" />
+  
+  <!-- Center Core: Titik fokus geometris -->
+  <circle cx="256" cy="318" r="5" fill="#ffffff" stop-opacity="0.9" />
+</svg>

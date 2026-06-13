@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradasi Kaca Terang -->
+    <linearGradient id="lightGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.3" />
+    </linearGradient>
+    
+    <!-- Gradasi Slate Gelap untuk Jangkar Kontras -->
+    <linearGradient id="darkSlate" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#334155" stop-opacity="0.6" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Ring: Pake warna netral sedang (Slate) biar masuk di terang/gelap -->
+  <circle cx="256" cy="256" r="220" fill="none" stroke="#64748b" stroke-width="5" stroke-opacity="0.4" stroke-dasharray="250 50 30 50"/>
+
+  <!-- Layer 1 (Sayap Kiri): Deep Slate Gelap. Ini yang bikin logo tetep kelihatan di Light Mode -->
+  <path d="M140 160 L230 380 L275 380 L185 160 Z" fill="url(#darkSlate)" stroke="#0f172a" stroke-width="2" stroke-opacity="0.4" />
+
+  <!-- Layer 2 (Sayap Kanan): Frosted Glass Putih (Overlapping di depan). Ini yang bikin menyala di Dark Mode -->
+  <path d="M372 160 L282 380 L237 380 L327 160 Z" fill="url(#lightGlass)" stroke="#ffffff" stroke-width="3" stroke-opacity="0.85" />
+  
+  <!-- Center Core: Titik silang geometri pembagi cahaya -->
+  <circle cx="245" cy="318" r="4" fill="#38bdf8" /> <!-- Sentuhan cyan tipis ala tech indicator -->
+</svg>
