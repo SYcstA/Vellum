@@ -9,7 +9,7 @@ import NotesWidget from "./components/NotesWidget";
 import LogWidget from "./components/LogWidget";
 import SettingsWidget from "./components/SettingsWidget";
 import WindowControls from "./components/WindowControls";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "./store/useAppStore";
 import { useWindowBoundaryGuard } from "./utils/window";
 import { initSchema, markSeeded } from "./store/db";
@@ -46,6 +46,13 @@ function App() {
         await loadData();
       } catch (err) {
         console.error("Database init failed:", err);
+      }
+      // Re-apply the user's saved Ghost-Mode hotkey (Rust registers Alt+G by
+      // default; this overrides it if the user rebound the combo).
+      const saved = useAppStore.getState().ghostShortcut;
+      if (saved && saved !== "Alt+G") {
+        try { await invoke("set_ghost_shortcut", { accelerator: saved }); }
+        catch (err) { console.error("Re-apply ghost shortcut failed:", err); }
       }
     }
     boot();

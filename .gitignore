@@ -27,3 +27,14 @@ dist-ssr
 .window-state
 *.window-state
 
+# Rust build artifacts (very large, do not commit)
+src-tauri/target/
+
+# Claude Code session files
+.claude/
+
+# SQLite databases (user data, never commit)
+*.db
+*.db-shm
+*.db-wal
+

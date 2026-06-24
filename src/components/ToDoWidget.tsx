@@ -1,12 +1,13 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Rnd } from "react-rnd";
 import { motion } from "framer-motion";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAppStore } from "../store/useAppStore";
 import { useLocalToday } from "../utils/date";
 import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
-import { Check, X, Pencil, FileText, ChevronRight } from "lucide-react";
+import { Check, X, Pencil, FileText, ChevronRight, GripVertical } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import { createPortal } from "react-dom";
 import ConfirmModal from "./ConfirmModal";
 import CategoryCombobox from "./CategoryCombobox";
 import DatePicker from "./DatePicker";
@@ -14,13 +15,17 @@ import DatePicker from "./DatePicker";
 function ToDoWidget() {
   const tasks = useAppStore((s) => s.tasks);
   const tags = useAppStore((s) => s.tags);
+  const notes = useAppStore((s) => s.notes);
   const noteTaskLinks = useAppStore((s) => s.noteTaskLinks);
+  const linkNote = useAppStore((s) => s.linkNote);
+  const unlinkNote = useAppStore((s) => s.unlinkNote);
   const addTask = useAppStore((s) => s.addTask);
   const toggleTask = useAppStore((s) => s.toggleTask);
   const editTaskTitle = useAppStore((s) => s.editTaskTitle);
   const editTaskFully = useAppStore((s) => s.editTaskFully);
   const openNotesWithHighlight = useAppStore((s) => s.openNotesWithHighlight);
   const deleteTaskById = useAppStore((s) => s.deleteTaskById);
+  const reorderTasks = useAppStore((s) => s.reorderTasks);
   const activeCategoryFilter = useAppStore((s) => s.activeCategoryFilter);
   const activeDateFilter = useAppStore((s) => s.activeDateFilter);
   const setActiveDateFilter = useAppStore((s) => s.setActiveDateFilter);
@@ -48,6 +53,12 @@ function ToDoWidget() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ taskId: string; taskTitle: string } | null>(null);
+  const [linkNotesTaskId, setLinkNotesTaskId] = useState<string | null>(null);
+  const [noteFilter, setNoteFilter] = useState("");
+  const closeLinkNotes = () => { setLinkNotesTaskId(null); setNoteFilter(""); };
+  // Task with 2+ linked notes opens this chooser instead of jumping to first note.
+  const [viewNotesTaskId, setViewNotesTaskId] = useState<string | null>(null);
+  const [taskSearch, setTaskSearch] = useState("");
 
   /* Full edit modal state */
   const [fullEditTask, setFullEditTask] = useState<{
@@ -70,11 +81,14 @@ function ToDoWidget() {
     else setTagSuggestions([]);
   };
   const selectTagSuggestion = (tag: string) => { setInputTag(tag); setTagSuggestions([]); };
+  // Tags entered comma-separated → array (trimmed, de-duped, non-empty).
+  const parseTags = (raw: string) => Array.from(new Set(raw.split(",").map((t) => t.trim()).filter(Boolean)));
   const handleSave = useCallback(async () => {
     const title = inputTitle.trim();
-    const tag = inputTag.trim() || "General";
+    const tags = parseTags(inputTag);
+    if (tags.length === 0) tags.push("General");
     if (!title) return;
-    await addTask(title, tag, inputDeadline || undefined);
+    await addTask(title, tags, inputDeadline || undefined);
     setInputTitle(""); setInputTag(""); setInputDeadline(""); setShowAddForm(false); setTagSuggestions([]);
   }, [inputTitle, inputTag, inputDeadline, addTask]);
   const handleToggle = (taskId: string, currentlyCompleted: boolean) => toggleTask(parseInt(taskId.replace("t", ""), 10), currentlyCompleted);
@@ -86,24 +100,26 @@ function ToDoWidget() {
   const handleEditKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditingTaskId(null); setEditValue(""); } };
   const handleTaskClick = (taskId: string) => {
     const linkedNoteIds = noteTaskLinks.filter((l) => l.taskId === taskId).map((l) => l.noteId);
-    if (linkedNoteIds.length > 0) openNotesWithHighlight(linkedNoteIds[0]);
+    if (linkedNoteIds.length === 1) openNotesWithHighlight(linkedNoteIds[0]);
+    else if (linkedNoteIds.length > 1) setViewNotesTaskId(taskId); // chooser
   };
 
   /* Full edit handlers */
   const openFullEdit = (task: typeof tasks[0]) => {
-    setFullEditTask({ taskId: task.id, title: task.text, category: task.category, deadline: task.deadlineDate || "" });
+    setFullEditTask({ taskId: task.id, title: task.text, category: task.tags.join(", "), deadline: task.deadlineDate || "" });
     setFullEditTitle(task.text);
-    setFullEditCategory(task.category);
+    setFullEditCategory(task.tags.join(", "));
     setFullEditDeadline(task.deadlineDate || "");
   };
 
   const saveFullEdit = async () => {
     if (!fullEditTask) return;
     const title = fullEditTitle.trim();
-    const cat = fullEditCategory.trim() || "General";
+    const tags = parseTags(fullEditCategory);
+    if (tags.length === 0) tags.push("General");
     if (!title) return;
     const numId = parseInt(fullEditTask.taskId.replace("t", ""), 10);
-    await editTaskFully(numId, title, cat, fullEditDeadline || undefined);
+    await editTaskFully(numId, title, tags, fullEditDeadline || undefined);
     setFullEditTask(null);
   };
 
@@ -113,50 +129,43 @@ function ToDoWidget() {
 
   // A task matches the active filters when it satisfies BOTH the category filter
   // and the date filter (deadline OR completion falling on the picked date).
+  const taskQuery = taskSearch.trim().toLowerCase();
   const matchesFilters = (t: typeof tasks[0]) =>
-    (!activeCategoryFilter || t.category === activeCategoryFilter) &&
-    (!activeDateFilter || t.deadlineDate === activeDateFilter || t.completionDate === activeDateFilter);
+    (!activeCategoryFilter || t.tags.includes(activeCategoryFilter)) &&
+    (!activeDateFilter || t.deadlineDate === activeDateFilter || t.completionDate === activeDateFilter) &&
+    (!taskQuery || t.text.toLowerCase().includes(taskQuery) || t.tags.some((tg) => tg.toLowerCase().includes(taskQuery)));
   const filteredPending = tasks.filter((t) => !t.completed && matchesFilters(t));
   const filteredCompleted = tasks.filter((t) => t.completed && matchesFilters(t));
 
-  // Flatten pending + (collapsible) completed into one list so it can be
-  // virtualized as a single scroll region — keeps the DOM light with 100+ tasks.
-  type Row =
-    | { kind: "task"; task: typeof tasks[0]; completed: boolean }
-    | { kind: "completed-header" };
-  const rows = useMemo<Row[]>(() => {
-    const r: Row[] = [];
-    for (const t of filteredPending) r.push({ kind: "task", task: t, completed: false });
-    if (filteredCompleted.length > 0) {
-      r.push({ kind: "completed-header" });
-      if (completedExpanded) {
-        for (const t of filteredCompleted) r.push({ kind: "task", task: t, completed: true });
-      }
-    }
-    return r;
-  }, [filteredPending, filteredCompleted, completedExpanded]);
+  // Drag-reorder is only valid on the natural pending order (no active filter/
+  // search reshuffling the list). Disable the grip when a filter is on.
+  const canReorderTasks = !activeCategoryFilter && !activeDateFilter && !taskQuery && filteredPending.length > 1;
 
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 64, // refined per-row via measureElement (rows vary in height)
-    overscan: 8,
-    // Stable identity per row so completing/reordering a task keeps its measured
-    // height and any inline-edit state attached to the right element.
-    getItemKey: (index) => {
-      const row = rows[index];
-      return row.kind === "task" ? row.task.id : "completed-header";
-    },
-  });
+  const onTasksDragEnd = (result: DropResult) => {
+    if (!result.destination || result.destination.index === result.source.index) return;
+    const ids = filteredPending.map((t) => t.id);
+    const [moved] = ids.splice(result.source.index, 1);
+    ids.splice(result.destination.index, 0, moved);
+    reorderTasks(ids);
+  };
 
-  const renderTask = (task: typeof tasks[0], isCompleted: boolean) => {
+  const renderTask = (
+    task: typeof tasks[0],
+    isCompleted: boolean,
+    drag?: { dragRef?: (el: HTMLElement | null) => void; dragProps?: object; handleProps?: object | null; isDragging?: boolean }
+  ) => {
     const isEditing = editingTaskId === task.id;
     // Overdue = has a deadline, not completed, and the deadline is before today.
     // String compare is valid for zero-padded YYYY-MM-DD. Reactive via todayStr.
     const isOverdue = !!task.deadlineDate && !isCompleted && task.deadlineDate < todayStr;
+    // Completed late = finished after its deadline (string compare ok for YYYY-MM-DD).
+    const completedLate = !!task.completionDate && !!task.deadlineDate && task.completionDate > task.deadlineDate;
     const linkedNoteCount = noteTaskLinks.filter((l) => l.taskId === task.id).length;
     return (
-      <div key={task.id} className="group flex items-start gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+      <div key={task.id} ref={drag?.dragRef} {...(drag?.dragProps || {})} className={`group flex items-start gap-2 p-2 rounded-lg transition-colors ${drag?.isDragging ? "bg-zinc-800 shadow-xl ring-1 ring-indigo-400/40" : "bg-white/5 hover:bg-white/10"}`}>
+        {drag?.handleProps !== undefined && (
+          <button {...(drag?.handleProps || {})} className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing text-white/20 hover:text-white/50 opacity-0 group-hover:opacity-100 transition-opacity" title="Drag to reorder"><GripVertical size={13} strokeWidth={1.75} /></button>
+        )}
         <button onClick={() => handleToggle(task.id, isCompleted)} className={`mt-0.5 w-4 h-4 rounded-full shrink-0 transition-colors flex items-center justify-center ${isCompleted ? "bg-indigo-500/40 border border-indigo-400" : "border-2 border-white/40 hover:border-indigo-400"}`} title={isCompleted ? "Reopen task" : "Mark as completed"}>
           {isCompleted && <Check size={10} strokeWidth={3} className="text-indigo-200" />}
         </button>
@@ -171,7 +180,9 @@ function ToDoWidget() {
             </p>
           )}
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[10px] font-medium text-indigo-300 bg-indigo-500/20 px-1.5 py-0.5 rounded">{task.category}</span>
+            {task.tags.map((tag) => (
+              <span key={tag} className="text-[10px] font-medium text-indigo-300 bg-indigo-500/20 px-1.5 py-0.5 rounded">{tag}</span>
+            ))}
             {task.deadlineDate && (
               <span
                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isOverdue ? "text-red-300 bg-red-500/20 font-medium" : "text-amber-300/70 bg-amber-500/10"}`}
@@ -180,7 +191,7 @@ function ToDoWidget() {
                 {task.deadlineDate}{isOverdue ? " · overdue" : ""}
               </span>
             )}
-            {task.completionDate && <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-300/70 bg-emerald-500/10 px-1.5 py-0.5 rounded"><Check size={10} strokeWidth={3} /> {task.completionDate}</span>}
+            {task.completionDate && <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded ${completedLate ? "text-orange-300 bg-orange-500/20 font-medium" : "text-emerald-300/70 bg-emerald-500/10"}`} title={completedLate ? "Completed late" : "Completed on time"}><Check size={10} strokeWidth={3} /> {task.completionDate}{completedLate ? " · late" : ""}</span>}
             {linkedNoteCount > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleTaskClick(task.id); }}
@@ -192,6 +203,8 @@ function ToDoWidget() {
             )}
           </div>
         </div>
+        {/* Link notes button */}
+        <button onClick={() => setLinkNotesTaskId(task.id)} className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-white/40 hover:text-sky-400 px-1" title="Link notes"><FileText size={13} strokeWidth={1.75} /></button>
         {/* Edit (pencil) button */}
         <button onClick={() => openFullEdit(task)} className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-white/40 hover:text-sky-400 px-1" title="Edit task details"><Pencil size={13} strokeWidth={1.75} /></button>
         {/* Delete button */}
@@ -229,7 +242,7 @@ function ToDoWidget() {
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors" />
               <div className="flex gap-2">
                 <div className="flex-1 relative">
-                  <input type="text" value={inputTag} onChange={(e) => handleTagInput(e.target.value)} list={tagDatalistId} placeholder="Tag (e.g. Laporan PKL)"
+                  <input type="text" value={inputTag} onChange={(e) => handleTagInput(e.target.value)} list={tagDatalistId} placeholder="Tags (comma-separated, e.g. PKL, Urgent)"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors" />
                   <datalist id={tagDatalistId}>{tags.map((t) => (<option key={t} value={t} />))}</datalist>
                   {tagSuggestions.length > 0 && (
@@ -243,7 +256,11 @@ function ToDoWidget() {
               <button onClick={handleSave} disabled={!inputTitle.trim()} className="w-full text-xs font-medium text-white bg-indigo-500/40 hover:bg-indigo-500/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-lg">+ Add Task</button>
             </div>
           )}
-          <div className="px-3 pt-2.5 pb-2 border-b border-white/5"><CategoryCombobox /></div>
+          <div className="px-3 pt-2.5 pb-2 border-b border-white/5 space-y-2">
+            <CategoryCombobox />
+            <input type="text" value={taskSearch} onChange={(e) => setTaskSearch(e.target.value)} placeholder="Search tasks…"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/90 placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors" />
+          </div>
           {activeDateFilter && (
             <div className="px-3 pt-2 pb-2 border-b border-white/5">
               <div className="flex items-center gap-2 text-[11px] text-sky-300 bg-sky-500/15 rounded-lg px-2.5 py-1.5">
@@ -253,33 +270,47 @@ function ToDoWidget() {
             </div>
           )}
           <div ref={parentRef} className="flex-1 overflow-y-auto p-3">
-            {rows.length === 0 ? (
-              <p className={`${txtMuted} text-sm text-center pt-4`}>{activeDateFilter ? `No tasks for ${activeDateFilter}.` : activeCategoryFilter ? `No tasks in [${activeCategoryFilter}].` : "No tasks yet. Click '+ New' to add one!"}</p>
+            {filteredPending.length === 0 && filteredCompleted.length === 0 ? (
+              <p className={`${txtMuted} text-sm text-center pt-4`}>{taskQuery ? `No tasks match "${taskSearch}".` : activeDateFilter ? `No tasks for ${activeDateFilter}.` : activeCategoryFilter ? `No tasks in [${activeCategoryFilter}].` : "No tasks yet. Click '+ New' to add one!"}</p>
             ) : (
-              <div style={{ height: rowVirtualizer.getTotalSize(), position: "relative", width: "100%" }}>
-                {rowVirtualizer.getVirtualItems().map((vi) => {
-                  const row = rows[vi.index];
-                  return (
-                    <div
-                      key={vi.key}
-                      data-index={vi.index}
-                      ref={rowVirtualizer.measureElement}
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vi.start}px)` }}
-                    >
-                      <div className="pb-1.5">
-                        {row.kind === "task" ? (
-                          renderTask(row.task, row.completed)
-                        ) : (
-                          <button onClick={() => setCompletedExpanded(!completedExpanded)} className="flex items-center gap-2 pt-2 pb-1 w-full text-left transition-colors hover:opacity-80">
-                            <motion.span animate={{ rotate: completedExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-white/40 inline-flex"><ChevronRight size={13} strokeWidth={2} /></motion.span>
-                            <span className="text-[11px] font-medium text-white/40 uppercase tracking-wider">Completed ({filteredCompleted.length})</span>
-                          </button>
-                        )}
+              <>
+                {/* Pending: drag-reorder when no filter active; otherwise static. */}
+                <DragDropContext onDragEnd={onTasksDragEnd}>
+                  <Droppable droppableId="pending-tasks" isDropDisabled={!canReorderTasks}>
+                    {(dp) => (
+                      <div ref={dp.innerRef} {...dp.droppableProps} className="space-y-1.5">
+                        {filteredPending.map((task, idx) => (
+                          <Draggable key={task.id} draggableId={task.id} index={idx} isDragDisabled={!canReorderTasks}>
+                            {(drag, snapshot) => {
+                              const node = renderTask(task, false, { dragRef: drag.innerRef, dragProps: drag.draggableProps, handleProps: canReorderTasks ? drag.dragHandleProps : undefined, isDragging: snapshot.isDragging });
+                              // Portal the dragging clone to <body>: Rnd wraps widgets in a
+                              // CSS transform, which otherwise offsets the fixed-position
+                              // drag clone (flies right / vanishes).
+                              return snapshot.isDragging ? createPortal(node, document.body) : node;
+                            }}
+                          </Draggable>
+                        ))}
+                        {dp.placeholder}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+
+                {/* Completed: collapsible, never draggable. */}
+                {filteredCompleted.length > 0 && (
+                  <div className="mt-1.5">
+                    <button onClick={() => setCompletedExpanded(!completedExpanded)} className="flex items-center gap-2 pt-2 pb-1 w-full text-left transition-colors hover:opacity-80">
+                      <motion.span animate={{ rotate: completedExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-white/40 inline-flex"><ChevronRight size={13} strokeWidth={2} /></motion.span>
+                      <span className="text-[11px] font-medium text-white/40 uppercase tracking-wider">Completed ({filteredCompleted.length})</span>
+                    </button>
+                    {completedExpanded && (
+                      <div className="space-y-1.5">
+                        {filteredCompleted.map((task) => renderTask(task, true))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -307,7 +338,7 @@ function ToDoWidget() {
                 type="text"
                 value={fullEditCategory}
                 onChange={(e) => setFullEditCategory(e.target.value)}
-                placeholder="Category / Tag…"
+                placeholder="Tags (comma-separated)…"
                 list="edit-tag-suggestions"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors"
               />
@@ -342,6 +373,81 @@ function ToDoWidget() {
       )}
 
       <ConfirmModal open={confirmDelete !== null} title="Delete Task" message={`Are you sure you want to delete: "${confirmDelete?.taskTitle}"?`} onConfirm={async () => { if (confirmDelete) { await deleteTaskById(confirmDelete.taskId); setConfirmDelete(null); }}} onCancel={() => setConfirmDelete(null)} />
+
+      {/* Link-notes modal: toggle which notes connect to this task (Note_Task_Tags). */}
+      {linkNotesTaskId && (() => {
+        const linkedSet = new Set(noteTaskLinks.filter((l) => l.taskId === linkNotesTaskId).map((l) => l.noteId));
+        const filtered = notes.filter((n) => n.title.toLowerCase().includes(noteFilter.toLowerCase()));
+        const allLinked = filtered.length > 0 && filtered.every((n) => linkedSet.has(n.id));
+        const toggleAll = async () => {
+          for (const n of filtered) {
+            const isLinked = linkedSet.has(n.id);
+            if (allLinked && isLinked) await unlinkNote(n.id, linkNotesTaskId);
+            else if (!allLinked && !isLinked) await linkNote(n.id, linkNotesTaskId);
+          }
+        };
+        return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeLinkNotes}>
+          <div className="relative glass-noise rounded-2xl p-5 w-[380px] max-w-[90vw]" style={glassStyle(widgetThemeColor, Math.max(widgetOpacity, 0.92))} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={`flex items-center gap-1.5 text-sm font-semibold ${txtHeader}`}><FileText size={14} strokeWidth={1.75} /> Link Notes</h3>
+              <span className="text-[10px] text-white/40">{linkedSet.size} linked</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="text" value={noteFilter} onChange={(e) => setNoteFilter(e.target.value)} placeholder="Search notes…" autoFocus
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/90 placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors" />
+              {filtered.length > 0 && (
+                <button onClick={toggleAll} className="shrink-0 text-[10px] font-medium text-indigo-300 bg-indigo-500/15 hover:bg-indigo-500/35 px-2.5 py-1.5 rounded-lg transition-colors">{allLinked ? "Unlink all" : "Link all"}</button>
+              )}
+            </div>
+            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+              {notes.length === 0 && <p className={`${txtMuted} text-xs text-center py-2`}>No notes yet.</p>}
+              {notes.length > 0 && filtered.length === 0 && <p className={`${txtMuted} text-xs text-center py-2`}>No notes match "{noteFilter}".</p>}
+              {filtered.map((note) => {
+                const linked = linkedSet.has(note.id);
+                return (
+                  <button key={note.id} onClick={() => linked ? unlinkNote(note.id, linkNotesTaskId) : linkNote(note.id, linkNotesTaskId)}
+                    className={`w-full flex items-center gap-2 text-left text-xs px-3 py-2 rounded-lg transition-colors ${linked ? "bg-indigo-500/30 text-indigo-200 border border-indigo-400/40" : "bg-white/5 text-white/70 border border-white/10 hover:bg-white/10"}`}>
+                    <span className={`w-4 h-4 rounded shrink-0 flex items-center justify-center ${linked ? "bg-indigo-500/50" : "border border-white/30"}`}>{linked && <Check size={10} strokeWidth={3} className="text-white" />}</span>
+                    <span className="flex-1 truncate">{note.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end mt-5">
+              <button onClick={closeLinkNotes} className="text-xs font-medium text-white bg-indigo-500/50 hover:bg-indigo-500/70 transition-colors px-4 py-1.5 rounded-lg">Done</button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* View-notes chooser: task with 2+ linked notes picks which one to open. */}
+      {viewNotesTaskId && (() => {
+        const linkedIds = new Set(noteTaskLinks.filter((l) => l.taskId === viewNotesTaskId).map((l) => l.noteId));
+        const linkedNotes = notes.filter((n) => linkedIds.has(n.id));
+        const open = (noteId: string) => { openNotesWithHighlight(noteId); setViewNotesTaskId(null); };
+        return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setViewNotesTaskId(null)}>
+          <div className="relative glass-noise rounded-2xl p-5 w-[380px] max-w-[90vw]" style={glassStyle(widgetThemeColor, Math.max(widgetOpacity, 0.92))} onClick={(e) => e.stopPropagation()}>
+            <h3 className={`flex items-center gap-1.5 text-sm font-semibold mb-4 ${txtHeader}`}><FileText size={14} strokeWidth={1.75} /> Open Linked Note</h3>
+            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+              {linkedNotes.map((note) => (
+                <button key={note.id} onClick={() => open(note.id)}
+                  className="w-full flex items-center gap-2 text-left text-xs px-3 py-2 rounded-lg bg-white/5 text-white/70 border border-white/10 hover:bg-sky-500/20 hover:text-sky-200 hover:border-sky-400/40 transition-colors">
+                  <FileText size={12} strokeWidth={1.75} className="shrink-0 text-sky-300" />
+                  <span className="flex-1 truncate">{note.title}</span>
+                  <ChevronRight size={13} strokeWidth={2} className="shrink-0 opacity-50" />
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end mt-5">
+              <button onClick={() => setViewNotesTaskId(null)} className="text-xs text-white/50 hover:text-white/80 transition-colors px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">Cancel</button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </>
   );
 }

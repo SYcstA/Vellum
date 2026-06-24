@@ -13,6 +13,7 @@ import { Ghost, Minus, Square, Copy, X } from "lucide-react";
 function WindowControls() {
   const widgetThemeColor = useAppStore((s) => s.widgetThemeColor);
   const widgetOpacity = useAppStore((s) => s.widgetOpacity);
+  const ghostShortcut = useAppStore((s) => s.ghostShortcut);
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [isMaximized, setIsMaximized] = useState(isFakeMaximized());
   const [ghost, setGhost] = useState(false);
@@ -62,10 +63,10 @@ function WindowControls() {
           style={glassStyle(widgetThemeColor, widgetOpacity)}
         >
           <div className="relative group">
-            <button onClick={handleGhost} className={`${ghost ? "text-sky-300" : txtBtn} flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/10`} title="Ghost Mode — make the window click-through (Press Alt+G to exit Interactivity)"><Ghost size={15} strokeWidth={1.75} /></button>
+            <button onClick={handleGhost} className={`${ghost ? "text-sky-300" : txtBtn} flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/10`} title={`Ghost Mode — make the window click-through (Press ${ghostShortcut} to exit)`}><Ghost size={15} strokeWidth={1.75} /></button>
             <div className="absolute top-full right-0 mt-1.5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap">
               <div className="glass-noise relative rounded-md px-2 py-1 text-[10px] font-mono tracking-tight text-white/80" style={glassStyle(widgetThemeColor, Math.max(widgetOpacity, 0.9))}>
-                Ghost Mode · Alt<span className="text-white/40 mx-0.5">+</span>G to exit
+                Ghost Mode · {ghostShortcut} to exit
               </div>
             </div>
           </div>

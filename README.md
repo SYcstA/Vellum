@@ -15,6 +15,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Rust](https://img.shields.io/badge/Rust-1.0-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Zustand](https://img.shields.io/badge/Zustand-5-433E38?style=for-the-badge&logo=react&logoColor=white)](https://github.com/pmndrs/zustand)
+[![Version](https://img.shields.io/badge/version-0.2.0-6366f1?style=for-the-badge)](https://github.com/SYcstA/Vellum/releases)
 
 </div>
 
@@ -37,12 +38,39 @@ Built on **Tauri 2** (a native Rust shell + a React/TypeScript frontend), Vellum
 
 ---
 
-## Key Features
+## What's New in v0.2.0
+
+### Rich Text Notes (TinyMCE)
+Notes now use a full **TinyMCE 8.6** rich-text editor — bold, italic, lists, links, headings, and more. Legacy plain-text notes are auto-converted to HTML on open, so no data is lost on upgrade. The editor is fully themed to match each widget skin (Dark Glass, Frosted Light, Pure Black), including toolbar icons and overflow menus.
+
+### Multi-Tag Tasks (M:N)
+Tasks now support **multiple tags** simultaneously. The primary tag is shown as the first chip; extra tags appear alongside it. Add and remove tags freely from the task edit form. The SQL layer uses a proper `Task_Tags` pivot table with ON DELETE CASCADE, so deleting a tag cleans up gracefully.
+
+### Drag & Drop Reorder
+Drag the **grip handle** (⠿) on any pending task or note to reorder it. Order is persisted to SQLite via a `Position` column — reopen the app and the order is exactly as you left it. Drag handles are hidden automatically when a filter or search is active to prevent confusing reorder semantics.
+
+### Resizable Notes Splitter
+The note list and editor panes in the Notes widget are now separated by a **drag-to-resize splitter**. Pull it left or right to give more room to the list or the editor. The width is saved to localStorage and restored on next open.
+
+### Search Everywhere
+- **Task search** — filters by task title or any of its tags.
+- **Note search** — searches note titles and the full rich-text content (HTML stripped before matching).
+
+### Activity Log — Simple & Advanced Modes
+The Activity Log now has a **Simple / Advanced** toggle in its header.
+- **Simple** shows a one-line summary per action.
+- **Advanced** shows a delta breakdown: what was renamed, which deadline changed (`old → new`), which tags were added or removed (`+[A] −[B]`), and how many characters changed in a note edit (`±N chars`).
+
+### Rebindable Ghost Mode Shortcut
+The Ghost Mode hotkey is no longer hardcoded to `Alt+G`. Open **Settings → Ghost Mode Shortcut**, click the button, and press any modifier + key combo. The new shortcut is saved, applied immediately in the Rust backend, and shown live in the Ghost button tooltip.
+
+---
+
+## Core Features
 
 ### Smart Widgets
 Independently draggable, resizable widgets for **To-Do**, **Notes**, **Calendar**, and an **Activity Log**. Every widget enforces strict screen-boundary clamping on mount, drag, and resize — so they never get lost off-screen, even after resolution changes or monitor unplugs.
 
-<!-- Widgets close-up: 1400×900, .png -->
 <div align="center">
 
 ![Widgets](./docs/screenshot-widgets.png)
@@ -50,12 +78,14 @@ Independently draggable, resizable widgets for **To-Do**, **Notes**, **Calendar*
 </div>
 
 ### Ghost Mode (Escape Hatch)
-Need to click *through* Vellum to interact with the desktop underneath? Toggle **Ghost Mode** from the title bar. The window becomes fully click-through — perfect for keeping a checklist visible while you work in another app. Press **`Alt + G`** at any time to instantly restore interactivity, so you can never lock yourself out.
+Need to click *through* Vellum to interact with the desktop underneath? Toggle **Ghost Mode** from the title bar. The window becomes fully click-through — perfect for keeping a checklist visible while you work in another app. Press your configured shortcut (default **`Alt + G`**) at any time to instantly restore interactivity.
+
+### Bi-directional Note ↔ Task Linking
+Click any task that has linked notes and a **note-picker popup** appears — listing every linked note by title so you can jump directly to the right one. From the Notes side, use the **Link to tags** panel to attach a note to all tasks of a given category in one click.
 
 ### Persistent State
-Powered by `tauri-plugin-window-state`, Vellum remembers your **custom window size**, **widget positions**, **theme** (Dark Glass · Frosted Light · Pure Black), **opacity**, and **wallpaper** across every session. Quit, reopen — it's exactly where you left it.
+Vellum remembers your **window size**, **widget positions**, **theme** (Dark Glass · Frosted Light · Pure Black), **opacity**, **wallpaper**, **Ghost Mode shortcut**, and **drag-reorder positions** across every session.
 
-<!-- Theme switcher comparison: side-by-side 1600×600, .png -->
 <div align="center">
 
 ![Themes](./docs/screenshot-themes.png)
@@ -71,11 +101,11 @@ Flip a single toggle in Settings to launch Vellum silently in the background on 
 
 ## Installation
 
-1. Head to the [**Releases page**](https://github.com/SYcstA/Vellum/releases) and grab the latest `Vellum-x.y.z-setup.exe`.
-2. Run the installer (NSIS, signed under publisher **YcstA**).
+1. Head to the [**Releases page**](https://github.com/SYcstA/Vellum/releases) and grab the latest `Vellum_0.2.0_x64-setup.exe`.
+2. Run the installer (NSIS, published by **YcstA**).
 3. Launch Vellum from the Start menu or pin it to the taskbar.
 
-That's it. No external runtime, no dependencies, no telemetry.
+**Upgrading from v0.1.0?** Run the new installer over the old one. The NSIS installer detects the existing install, replaces only the binaries, and leaves your data directory (`%APPDATA%\com.osvaldo.vellum\`) untouched. On first launch, v0.2.0 automatically migrates your database (adds the new `Task_Tags` pivot and `Position` ordering columns) — no manual steps needed.
 
 ---
 
@@ -90,7 +120,8 @@ npm install
 # Run in dev mode (hot-reload on the frontend, Rust rebuilds on change)
 npm run tauri dev
 
-# Build a production installer (.exe + NSIS bundle under /src-tauri/target/release/bundle/)
+# Build a production installer (.exe + NSIS bundle)
+# Output: src-tauri/target/release/bundle/nsis/Vellum_0.2.0_x64-setup.exe
 npm run tauri build
 ```
 
@@ -105,14 +136,15 @@ npm run tauri build
 | Styling | Tailwind CSS 4 + custom glassmorphism design tokens |
 | State | Zustand 5 (persisted via `localStorage`) |
 | Persistence | SQLite (via `tauri-plugin-sql`) |
-| Icons | lucide-react |
-| Virtualization | `@tanstack/react-virtual` |
+| Rich Text | TinyMCE 8.6 (self-hosted) |
+| Drag & Drop | `@hello-pangea/dnd` |
+| Icons | `lucide-react` |
 
 ---
 
 ## Screenshots Folder
 
-All README images live in [`./docs/`](./docs/). To swap in your own screenshots, just drop PNGs/GIFs in there with these filenames:
+All README images live in [`./docs/`](./docs/). To swap in your own screenshots, drop PNGs/GIFs in there with these filenames:
 
 | Filename | What it shows | Suggested size |
 |---|---|---|

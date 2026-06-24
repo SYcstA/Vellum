@@ -1,6 +1,6 @@
 {
   "productName": "Vellum",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.osvaldo.vellum",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -19,7 +19,7 @@
         "transparent": true,
         "visible": false,
         "dragDropEnabled": false,
-        "devtools": true
+        "devtools": false
       }
     ],
     "security": {

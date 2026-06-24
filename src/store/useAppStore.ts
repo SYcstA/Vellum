@@ -13,11 +13,15 @@ import {
   toggleTaskCompletion,
   updateTaskTitle,
   updateTaskFull,
+  addTaskTag,
+  removeTaskTag,
   updateNoteTitle,
   updateNoteContent,
   linkNoteToTask,
   unlinkNoteFromTask,
   linkNoteToTag,
+  reorderTasksDb,
+  reorderNotesDb,
   renameCategory,
   deleteCategory,
   createCategory,
@@ -28,11 +32,12 @@ import {
   logAction,
   getDb,
 } from "./db";
+import { stripHtml } from "../utils/notes";
 
 export type Task = {
   id: string;
   text: string;
-  category: string;
+  tags: string[];
   completed: boolean;
   completionDate?: string;
   deadlineDate?: string;
@@ -82,6 +87,7 @@ interface AppState {
   widgetThemeColor: "dark" | "light" | "pure-black";
   widgetOpacity: number;
   wallpaperPath: string | null;
+  ghostShortcut: string;
 
   /* Non-persisted data */
   tasks: Task[];
@@ -94,10 +100,12 @@ interface AppState {
 
   /* Actions */
   loadData: () => Promise<void>;
-  addTask: (title: string, categoryName: string, deadlineDate?: string) => Promise<void>;
+  addTask: (title: string, tags: string[], deadlineDate?: string) => Promise<void>;
   toggleTask: (taskId: number, currentlyCompleted: boolean) => Promise<void>;
   editTaskTitle: (taskId: number, newTitle: string) => Promise<void>;
-  editTaskFully: (taskId: number, title: string, category: string, deadlineDate?: string) => Promise<void>;
+  editTaskFully: (taskId: number, title: string, tags: string[], deadlineDate?: string) => Promise<void>;
+  addTagToTask: (taskId: string, tagName: string) => Promise<void>;
+  removeTagFromTask: (taskId: string, tagName: string) => Promise<void>;
   editNoteTitle: (noteId: number, newTitle: string) => Promise<void>;
   saveNoteContent: (noteId: number, content: string) => Promise<void>;
   hideWindow: () => Promise<void>;
@@ -106,6 +114,7 @@ interface AppState {
   setWidgetThemeColor: (color: "dark" | "light" | "pure-black") => void;
   setWidgetOpacity: (opacity: number) => void;
   setWallpaperPath: (path: string | null) => void;
+  setGhostShortcut: (accelerator: string) => void;
   refreshLogs: () => Promise<void>;
   refreshTags: () => Promise<void>;
   setActiveCategoryFilter: (filter: string) => void;
@@ -125,6 +134,10 @@ interface AppState {
   unlinkNote: (noteId: string, taskId: string) => Promise<void>;
   linkNoteToTagName: (noteId: string, tagName: string) => Promise<void>;
   refreshNoteTaskLinks: () => Promise<void>;
+
+  /* Reordering (drag & drop) */
+  reorderNotes: (orderedIds: string[]) => Promise<void>;
+  reorderTasks: (orderedPendingIds: string[]) => Promise<void>;
 }
 
 function numericId(id: string): number {
@@ -247,6 +260,7 @@ export const useAppStore = create<AppState>()(
       widgetThemeColor: "dark" as const,
       widgetOpacity: 1.0,
       wallpaperPath: null,
+      ghostShortcut: "Alt+G",
       widgetPositions: {
         todo: { x: 50, y: 50, width: 420, height: 400 },
         calendar: { x: 500, y: 50, width: 360, height: 390 },
@@ -261,6 +275,7 @@ export const useAppStore = create<AppState>()(
       setWidgetThemeColor: (color) => set({ widgetThemeColor: color }),
       setWidgetOpacity: (opacity) => set({ widgetOpacity: opacity }),
       setWallpaperPath: (path) => set({ wallpaperPath: path }),
+      setGhostShortcut: (accelerator) => set({ ghostShortcut: accelerator }),
       setHighlightedNoteId: (noteId) => set({ highlightedNoteId: noteId, noteSelectionEpoch: Date.now() }),
 
       /* ─── NON-PERSISTED STATE ─── */
@@ -309,18 +324,32 @@ export const useAppStore = create<AppState>()(
 
       /* ─── TRUE OPTIMISTIC UI MUTATIONS ─── */
 
-      addTask: async (title, categoryName, deadlineDate) => {
+      addTask: async (title, tags, deadlineDate) => {
         const state = get();
+        const cleanTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
+        if (cleanTags.length === 0) cleanTags.push("General");
         const maxId = state.tasks.reduce((max, t) => Math.max(max, numericId(t.id)), 0);
         const tempId = `t${maxId + 1}`;
-        const newTags = state.tags.includes(categoryName) ? state.tags : [...state.tags, categoryName];
-        set({ tasks: [...state.tasks, { id: tempId, text: title, category: categoryName, completed: false, deadlineDate: deadlineDate || undefined }], tags: newTags });
+        const mergedTags = Array.from(new Set([...state.tags, ...cleanTags])).sort();
+        set({ tasks: [...state.tasks, { id: tempId, text: title, tags: cleanTags, completed: false, deadlineDate: deadlineDate || undefined }], tags: mergedTags });
         try {
-          const result = await createTask(title, categoryName, deadlineDate);
+          const result = await createTask(title, cleanTags, deadlineDate);
           const realId = `t${result.taskId}`;
           set((s) => ({
             tasks: s.tasks.map((t) => (t.id === tempId ? { ...t, id: realId } : t)),
           }));
+          // Auto-link the new task to every note already linked to ANY of its tags,
+          // so a note "linked to tag X" stays complete as new tasks join X.
+          const cur = get();
+          const tagTaskIds = new Set(cur.tasks.filter((t) => t.id !== realId && t.tags.some((tg) => cleanTags.includes(tg))).map((t) => t.id));
+          const noteIds = Array.from(new Set(cur.noteTaskLinks.filter((l) => tagTaskIds.has(l.taskId)).map((l) => l.noteId)));
+          if (noteIds.length > 0) {
+            set((s) => ({ noteTaskLinks: [...s.noteTaskLinks, ...noteIds.map((noteId) => ({ noteId, taskId: realId }))] }));
+            for (const noteId of noteIds) {
+              try { await linkNoteToTask(numericNoteId(noteId), result.taskId); }
+              catch (e) { console.error("Auto-link new task to note failed:", e); set((s) => ({ noteTaskLinks: s.noteTaskLinks.filter((l) => !(l.noteId === noteId && l.taskId === realId)) })); }
+            }
+          }
         } catch (err) { console.error("Failed to create task, rolling back:", err); set((s) => ({ tasks: s.tasks.filter((t) => t.id !== tempId) })); }
       },
 
@@ -343,32 +372,72 @@ export const useAppStore = create<AppState>()(
         try { await updateTaskTitle(taskId, newTitle); } catch (err) { set({ tasks: prev }); }
       },
 
-      editTaskFully: async (taskId, title, category, deadlineDate) => {
+      editTaskFully: async (taskId, title, tags, deadlineDate) => {
+        const cleanTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
+        if (cleanTags.length === 0) cleanTags.push("General");
+        // Capture the BEFORE state for the advanced-log delta.
+        const prev = get().tasks.find((t) => numericId(t.id) === taskId);
         try {
           await mutate(set, get, {
             optimistic: (s) => ({
               tasks: s.tasks.map((t) =>
                 numericId(t.id) === taskId
-                  ? { ...t, text: title, category, deadlineDate: deadlineDate || undefined }
+                  ? { ...t, text: title, tags: cleanTags, deadlineDate: deadlineDate || undefined }
                   : t
               ),
-              // Ensure the category exists in tags list
-              tags: s.tags.includes(category) ? s.tags : [...s.tags, category].sort(),
+              // Ensure every tag exists in the tags list
+              tags: Array.from(new Set([...s.tags, ...cleanTags])).sort(),
             }),
             rollbackKeys: ["tasks", "tags"],
-            write: () => updateTaskFull(taskId, title, category, deadlineDate),
-            log: () => ({
-              actionType: "TASK_EDITED",
-              detail: `Updated task: "${title}" in [${category}]`,
-              entityType: "task" as const,
-              entityId: taskId,
-            }),
+            write: () => updateTaskFull(taskId, title, cleanTags, deadlineDate),
+            log: () => {
+              // Build delta parts ("·"-separated). First segment = simple view;
+              // the rest is surfaced only in the Activity Log's Advanced mode.
+              const parts = [`Updated task: "${title}"`];
+              if (prev) {
+                if (prev.text !== title) parts.push(`renamed from "${prev.text}"`);
+                const od = prev.deadlineDate || "none", nd = deadlineDate || "none";
+                if (od !== nd) parts.push(`deadline ${od} → ${nd}`);
+                const added = cleanTags.filter((t) => !prev.tags.includes(t));
+                const removed = prev.tags.filter((t) => !cleanTags.includes(t));
+                if (added.length) parts.push(`+tags [${added.join(", ")}]`);
+                if (removed.length) parts.push(`−tags [${removed.join(", ")}]`);
+              }
+              return {
+                actionType: "TASK_EDITED",
+                detail: parts.join(" · "),
+                entityType: "task" as const,
+                entityId: taskId,
+              };
+            },
           });
         } catch (err) {
           // mutate() already rolled back the optimistic UI; swallow to preserve
           // the previous non-throwing contract (the edit modal closes regardless).
           console.error("editTaskFully failed, rolled back:", err);
         }
+      },
+
+      addTagToTask: async (taskId, tagName) => {
+        const name = tagName.trim();
+        if (!name) return;
+        const prevTasks = get().tasks;
+        const prevTags = get().tags;
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === taskId && !t.tags.includes(name) ? { ...t, tags: [...t.tags, name] } : t)),
+          tags: s.tags.includes(name) ? s.tags : [...s.tags, name].sort(),
+        }));
+        try { await addTaskTag(numericId(taskId), name); await get().refreshLogs(); }
+        catch (err) { console.error("addTagToTask failed:", err); set({ tasks: prevTasks, tags: prevTags }); }
+      },
+
+      removeTagFromTask: async (taskId, tagName) => {
+        const task = get().tasks.find((t) => t.id === taskId);
+        if (!task || task.tags.length <= 1 || !task.tags.includes(tagName)) return; // keep >=1 tag
+        const prevTasks = get().tasks;
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, tags: t.tags.filter((tg) => tg !== tagName) } : t)) }));
+        try { await removeTaskTag(numericId(taskId), tagName); await get().refreshLogs(); }
+        catch (err) { console.error("removeTagFromTask failed:", err); set({ tasks: prevTasks }); }
       },
 
       editNoteTitle: async (noteId, newTitle) => {
@@ -378,15 +447,27 @@ export const useAppStore = create<AppState>()(
       },
 
       saveNoteContent: async (noteId, content) => {
+        const before = get().notes.find((n) => numericNoteId(n.id) === noteId);
+        const note = before; // for title in the log
+        const prevLen = before ? stripHtml(before.text).length : 0;
         set((s) => ({ notes: s.notes.map((n) => (numericNoteId(n.id) === noteId ? { ...n, text: content } : n)) }));
-        try { await updateNoteContent(noteId, content); } catch (err) { console.error("Failed to save note content:", err); }
+        try {
+          await updateNoteContent(noteId, content);
+          // Advanced-log delta: plain-text length change (avoids dumping HTML).
+          const newLen = stripHtml(content).length;
+          if (note && newLen !== prevLen) {
+            const sign = newLen >= prevLen ? "+" : "−";
+            await logAction("NOTE_EDITED", `Edited note: "${note.title}" · ${sign}${Math.abs(newLen - prevLen)} chars (${prevLen} → ${newLen})`);
+            await get().refreshLogs();
+          }
+        } catch (err) { console.error("Failed to save note content:", err); }
       },
 
       deleteTaskById: async (taskId) => {
         const task = get().tasks.find((t) => t.id === taskId);
         const numId = numericId(taskId);
         set((s) => ({ tasks: s.tasks.filter((t) => t.id !== taskId) }));
-        try { await deleteTaskDb(numId); if (task) await logAction("TASK_DELETED", `Deleted task: "${task.text}" in [${task.category}]`); } catch (err) { set((s) => ({ tasks: [...s.tasks, task!].filter(Boolean) })); }
+        try { await deleteTaskDb(numId); if (task) await logAction("TASK_DELETED", `Deleted task: "${task.text}" in [${task.tags.join(", ")}]`); } catch (err) { set((s) => ({ tasks: [...s.tasks, task!].filter(Boolean) })); }
       },
 
       deleteNoteById: async (noteId) => {
@@ -435,7 +516,7 @@ export const useAppStore = create<AppState>()(
       linkNoteToTagName: async (noteId, tagName) => {
         const nid = numericNoteId(noteId);
         const state = get();
-        const tagTaskIds = state.tasks.filter((t) => t.category === tagName).map((t) => t.id);
+        const tagTaskIds = state.tasks.filter((t) => t.tags.includes(tagName)).map((t) => t.id);
         const newLinks = tagTaskIds.filter((tid) => !state.noteTaskLinks.some((l) => l.noteId === noteId && l.taskId === tid)).map((tid) => ({ noteId, taskId: tid }));
         if (newLinks.length === 0) return;
         set((s) => ({ noteTaskLinks: [...s.noteTaskLinks, ...newLinks] }));
@@ -446,7 +527,7 @@ export const useAppStore = create<AppState>()(
         const d = await getDb();
         const rows = await d.select<{ ID: number }[]>("SELECT ID FROM Categories WHERE Name = ?1", [oldName]);
         if (rows.length > 0) await renameCategory(rows[0].ID, newName);
-        set((s) => ({ tags: s.tags.map((t) => (t === oldName ? newName : t)), tasks: s.tasks.map((t) => (t.category === oldName ? { ...t, category: newName } : t)), activeCategoryFilter: s.activeCategoryFilter === oldName ? newName : s.activeCategoryFilter }));
+        set((s) => ({ tags: s.tags.map((t) => (t === oldName ? newName : t)), tasks: s.tasks.map((t) => (t.tags.includes(oldName) ? { ...t, tags: Array.from(new Set(t.tags.map((tg) => (tg === oldName ? newName : tg)))) } : t)), activeCategoryFilter: s.activeCategoryFilter === oldName ? newName : s.activeCategoryFilter }));
       },
 
       deleteCategoryAction: async (name) => {
@@ -454,31 +535,46 @@ export const useAppStore = create<AppState>()(
         // OS dialog here. This action assumes the caller already confirmed.
         try {
           await mutate(set, get, {
-            // Snapshot → optimistic removal of the category, its tasks, their
-            // calendar markers and note links, and any active filter on it.
+            // Snapshot → optimistic: drop the tag from every task. Tasks left
+            // with NO tag are deleted (their note links too); multi-tag tasks
+            // survive with the tag stripped. Clear any filter on it.
             optimistic: (s) => {
-              const deletedStrIds = s.tasks.filter((t) => t.category === name).map((t) => t.id);
+              const orphanIds = s.tasks.filter((t) => t.tags.includes(name) && t.tags.length === 1).map((t) => t.id);
               return {
                 tags: s.tags.filter((t) => t !== name),
-                tasks: s.tasks.filter((t) => t.category !== name),
-                noteTaskLinks: s.noteTaskLinks.filter((l) => !deletedStrIds.includes(l.taskId)),
+                tasks: s.tasks
+                  .filter((t) => !orphanIds.includes(t.id))
+                  .map((t) => (t.tags.includes(name) ? { ...t, tags: t.tags.filter((tg) => tg !== name) } : t)),
+                noteTaskLinks: s.noteTaskLinks.filter((l) => !orphanIds.includes(l.taskId)),
                 activeCategoryFilter: s.activeCategoryFilter === name ? "" : s.activeCategoryFilter,
               };
             },
             rollbackKeys: ["tags", "tasks", "noteTaskLinks", "activeCategoryFilter"],
-            // SQLite cascades task + link deletion via ON DELETE CASCADE.
             write: async (db): Promise<number | null> => {
               const rows = await db.select<{ ID: number }[]>(
                 "SELECT ID FROM Categories WHERE Name = ?1",
                 [name]
               );
               const catId = rows.length > 0 ? rows[0].ID : null;
-              if (catId != null) await deleteCategory(catId);
+              if (catId != null) {
+                // Repoint primary (Category_ID) off this tag for any multi-tag task
+                // BEFORE delete, so FK CASCADE only removes truly tag-less tasks.
+                await db.execute(
+                  `UPDATE Tasks SET Category_ID = (
+                     SELECT TT.Tag_ID FROM Task_Tags TT
+                      WHERE TT.Task_ID = Tasks.ID AND TT.Tag_ID != ?1
+                      ORDER BY TT.Tag_ID LIMIT 1)
+                   WHERE Category_ID = ?1
+                     AND EXISTS (SELECT 1 FROM Task_Tags TT2 WHERE TT2.Task_ID = Tasks.ID AND TT2.Tag_ID != ?1)`,
+                  [catId]
+                );
+                await deleteCategory(catId);
+              }
               return catId;
             },
             log: (catId) => ({
               actionType: "CATEGORY_DELETED",
-              detail: `Deleted category: "${name}" and all its tasks`,
+              detail: `Deleted tag: "${name}" (tag-less tasks removed)`,
               entityType: "category" as const,
               entityId: catId ?? undefined,
             }),
@@ -494,6 +590,28 @@ export const useAppStore = create<AppState>()(
       addCategoryAction: async (name) => { await createCategory(name); const state = get(); if (!state.tags.includes(name)) set({ tags: [...state.tags, name].sort() }); },
 
       refreshNoteTaskLinks: async () => { const noteTaskLinks = await fetchNoteTaskLinks(); set({ noteTaskLinks }); },
+
+      reorderNotes: async (orderedIds) => {
+        const prev = get().notes;
+        const byId = new Map(prev.map((n) => [n.id, n]));
+        const reordered = orderedIds.map((id) => byId.get(id)).filter(Boolean) as Note[];
+        // Guard: keep any note not present in orderedIds (shouldn't happen) at end.
+        const extras = prev.filter((n) => !orderedIds.includes(n.id));
+        set({ notes: [...reordered, ...extras] });
+        try { await reorderNotesDb([...reordered, ...extras].map((n) => numericNoteId(n.id))); }
+        catch (err) { console.error("reorderNotes failed:", err); set({ notes: prev }); }
+      },
+
+      reorderTasks: async (orderedPendingIds) => {
+        const prev = get().tasks;
+        const byId = new Map(prev.map((t) => [t.id, t]));
+        const newPending = orderedPendingIds.map((id) => byId.get(id)).filter(Boolean) as Task[];
+        const rest = prev.filter((t) => !orderedPendingIds.includes(t.id)); // completed + any unlisted
+        set({ tasks: [...newPending, ...rest] });
+        // Persist Position for the dragged (pending) tasks only; completed keep theirs.
+        try { await reorderTasksDb(newPending.map((t) => numericId(t.id))); }
+        catch (err) { console.error("reorderTasks failed:", err); set({ tasks: prev }); }
+      },
     }),
     {
       name: "productivity-app-storage",
@@ -509,6 +627,7 @@ export const useAppStore = create<AppState>()(
         widgetThemeColor: state.widgetThemeColor,
         widgetOpacity: state.widgetOpacity,
         wallpaperPath: state.wallpaperPath,
+        ghostShortcut: state.ghostShortcut,
       }),
     }
   )

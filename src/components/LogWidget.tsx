@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Rnd } from "react-rnd";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
@@ -29,10 +29,21 @@ function LogWidget() {
   const textTertiary = isLight ? "text-gray-400" : "text-white/30";
   const hoverBg = isLight ? "hover:bg-black/5" : "hover:bg-white/10";
 
+  const [advanced, setAdvanced] = useState(false);
+
   const actionColor: Record<string, string> = {
     TASK_CREATED: isLight ? "text-emerald-600" : "text-emerald-300",
     TASK_COMPLETED: isLight ? "text-sky-600" : "text-sky-300",
     TASK_REOPENED: isLight ? "text-amber-600" : "text-amber-300",
+    TASK_EDITED: isLight ? "text-indigo-600" : "text-indigo-300",
+    TASK_DELETED: isLight ? "text-red-600" : "text-red-300",
+    NOTE_CREATED: isLight ? "text-emerald-600" : "text-emerald-300",
+    NOTE_EDITED: isLight ? "text-indigo-600" : "text-indigo-300",
+    NOTE_DELETED: isLight ? "text-red-600" : "text-red-300",
+    NOTE_LINKED: isLight ? "text-sky-600" : "text-sky-300",
+    CATEGORY_CREATED: isLight ? "text-emerald-600" : "text-emerald-300",
+    CATEGORY_RENAMED: isLight ? "text-amber-600" : "text-amber-300",
+    CATEGORY_DELETED: isLight ? "text-red-600" : "text-red-300",
     SYSTEM: textTertiary,
   };
 
@@ -61,22 +72,47 @@ function LogWidget() {
       <div className="relative glass-noise w-full h-full rounded-2xl overflow-hidden flex flex-col" style={glassStyle(widgetThemeColor, widgetOpacity)}>
         <div className={`drag-header flex items-center justify-between px-4 py-3 bg-transparent border-b ${isLight ? "border-black/5" : "border-white/8"} select-none cursor-move`}>
           <span className={`text-[13px] font-semibold tracking-tight ${textPrimary}`}>Activity Log</span>
+          <div className="flex gap-0.5 rounded-lg p-0.5 bg-white/5">
+            {(["simple", "advanced"] as const).map((m) => {
+              const active = (m === "advanced") === advanced;
+              return (
+                <button key={m} onClick={() => setAdvanced(m === "advanced")}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-colors ${active ? "bg-indigo-500/30 text-indigo-200" : `${textSecondary} hover:text-white/80`}`}>
+                  {m === "simple" ? "Simple" : "Advanced"}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
           {logs.length === 0 && (
             <p className={`text-sm text-center pt-4 ${textTertiary}`}>No activity yet.</p>
           )}
-          {logs.map((entry) => (
-            <div key={entry.id} className={`p-2 rounded-lg bg-white/5 ${hoverBg} transition-colors`}>
-              <div className="flex items-center justify-between gap-2">
-                <span className={`text-[10px] font-semibold uppercase tracking-wider ${actionColor[entry.actionType] || textSecondary}`}>
-                  {entry.actionType.replace("_", " ")}
-                </span>
-                <span className={`text-[10px] font-mono ${textTertiary} shrink-0`}>{entry.timestamp}</span>
+          {logs.map((entry) => {
+            // Detail is "·"-separated: first segment = summary (Simple), the rest
+            // are the delta (Advanced only).
+            const segments = entry.detail.split(" · ");
+            const summary = segments[0];
+            const extra = segments.slice(1);
+            return (
+              <div key={entry.id} className={`p-2 rounded-lg bg-white/5 ${hoverBg} transition-colors`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${actionColor[entry.actionType] || textSecondary}`}>
+                    {entry.actionType.replace(/_/g, " ")}
+                  </span>
+                  <span className={`text-[10px] font-mono ${textTertiary} shrink-0`}>{entry.timestamp}</span>
+                </div>
+                <p className={`text-xs ${isLight ? "text-gray-600" : "text-white/70"} mt-0.5`}>{summary}</p>
+                {advanced && extra.length > 0 && (
+                  <ul className={`mt-1 space-y-0.5 border-l-2 ${isLight ? "border-indigo-200" : "border-indigo-400/30"} pl-2`}>
+                    {extra.map((e, i) => (
+                      <li key={i} className={`text-[11px] font-mono ${isLight ? "text-gray-500" : "text-white/50"}`}>{e}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              <p className={`text-xs ${isLight ? "text-gray-600" : "text-white/70"} mt-0.5`}>{entry.detail}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </Rnd>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Rnd } from "react-rnd";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
@@ -19,10 +20,42 @@ function SettingsWidget() {
   const setWidgetPos = useAppStore((s) => s.setWidgetPosition);
   const wallpaperPath = useAppStore((s) => s.wallpaperPath);
   const setWallpaperPath = useAppStore((s) => s.setWallpaperPath);
+  const ghostShortcut = useAppStore((s) => s.ghostShortcut);
+  const setGhostShortcut = useAppStore((s) => s.setGhostShortcut);
   useWidgetBoundaryClamp("settings", widgetPos, setWidgetPos);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [autoStartEnabled, setAutoStartEnabled] = useState(false);
+  const [capturingShortcut, setCapturingShortcut] = useState(false);
+  const [shortcutError, setShortcutError] = useState("");
+
+  // Build a Tauri accelerator string from a key event; require >=1 modifier so
+  // the global hotkey can't collide with plain typing.
+  const captureShortcut = async (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    const k = e.key;
+    if (["Control", "Alt", "Shift", "Meta"].includes(k)) return; // wait for a real key
+    const mods: string[] = [];
+    if (e.ctrlKey) mods.push("Control");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Super");
+    let main = "";
+    if (/^[a-z]$/i.test(k)) main = k.toUpperCase();
+    else if (/^[0-9]$/.test(k)) main = k;
+    else if (/^F\d{1,2}$/.test(k)) main = k;
+    else if (k === " ") main = "Space";
+    if (!main || mods.length === 0) { setShortcutError("Need a modifier (Ctrl/Alt/Shift) + a key."); return; }
+    const acc = [...mods, main].join("+");
+    try {
+      await invoke("set_ghost_shortcut", { accelerator: acc });
+      setGhostShortcut(acc);
+      setShortcutError("");
+      setCapturingShortcut(false);
+    } catch (err) {
+      setShortcutError(String(err));
+    }
+  };
 
   const handleBrowseWallpaper = async () => {
     try {
@@ -139,6 +172,19 @@ function SettingsWidget() {
               <button onClick={handleToggleAutoStart} className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${autoStartEnabled ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30" : `${isLight ? "bg-gray-100 text-gray-600 border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:border-white/30"}`}`}>
                 {autoStartEnabled && <Check size={13} strokeWidth={2.5} />}Launch on System Startup
               </button>
+            </div>
+            {/* Ghost Mode Shortcut */}
+            <div>
+              <p className={`text-xs ${textSecondary} mb-2`}>Ghost Mode Shortcut</p>
+              <button
+                onKeyDown={capturingShortcut ? captureShortcut : undefined}
+                onClick={() => { setCapturingShortcut(true); setShortcutError(""); }}
+                onBlur={() => setCapturingShortcut(false)}
+                className={`w-full text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${capturingShortcut ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
+              >
+                {capturingShortcut ? "Press keys… (Esc-able: click away)" : <>Current: <span className="font-mono">{ghostShortcut}</span> — click to rebind</>}
+              </button>
+              {shortcutError && <p className="text-[10px] text-red-400 mt-1">{shortcutError}</p>}
             </div>
             {/* Danger Zone */}
             <div>

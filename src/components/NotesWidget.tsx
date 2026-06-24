@@ -2,9 +2,13 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Rnd } from "react-rnd";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
+import { noteContentToHtml, stripHtml } from "../utils/notes";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
 import { Check, X } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
+import RichTextEditor from "./RichTextEditor";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import { createPortal } from "react-dom";
 
 function NotesWidget() {
   const notes = useAppStore((s) => s.notes);
@@ -19,6 +23,7 @@ function NotesWidget() {
   const unlinkNote = useAppStore((s) => s.unlinkNote);
   const deleteNoteById = useAppStore((s) => s.deleteNoteById);
   const addNote = useAppStore((s) => s.addNote);
+  const reorderNotes = useAppStore((s) => s.reorderNotes);
   const widgetPos = useAppStore((s) => s.widgetPositions.notes);
   const setWidgetPos = useAppStore((s) => s.setWidgetPosition);
   const widgetThemeColor = useAppStore((s) => s.widgetThemeColor);
@@ -32,12 +37,35 @@ function NotesWidget() {
   const [newNoteContent, setNewNoteContent] = useState("");
   const [contentValue, setContentValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ noteId: string; noteTitle: string } | null>(null);
+  const [noteSearch, setNoteSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  // Resizable list↔editor splitter; width persisted across sessions.
+  const [listWidth, setListWidth] = useState<number>(() => {
+    const v = localStorage.getItem("vellum_notes_list_width");
+    return v ? parseInt(v, 10) : 140;
+  });
+  const splitDragRef = useRef<{ startX: number; startW: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const highlightRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   const selectedNote = activeNoteId ? notes.find((n) => n.id === activeNoteId) : undefined;
+
+  // Manual search over note title + plain-text (HTML-stripped) content.
+  const noteQuery = noteSearch.trim().toLowerCase();
+  const filteredNotes = noteQuery
+    ? notes.filter((n) => n.title.toLowerCase().includes(noteQuery) || stripHtml(n.text).toLowerCase().includes(noteQuery))
+    : notes;
+  const canReorderNotes = noteQuery === "" && notes.length > 1;
+
+  const onNotesDragEnd = (result: DropResult) => {
+    if (!result.destination || result.destination.index === result.source.index) return;
+    const ids = filteredNotes.map((n) => n.id);
+    const [moved] = ids.splice(result.source.index, 1);
+    ids.splice(result.destination.index, 0, moved);
+    reorderNotes(ids);
+  };
 
   function numericNoteId(id: string): number {
     return parseInt(id.replace("n", ""), 10);
@@ -62,7 +90,7 @@ function NotesWidget() {
 
   useEffect(() => {
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
-    if (selectedNote) setContentValue(selectedNote.text);
+    if (selectedNote) setContentValue(noteContentToHtml(selectedNote.text));
   }, [selectedNote?.id]);
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
@@ -71,7 +99,7 @@ function NotesWidget() {
     const taskIds = noteTaskLinks.filter((l) => l.noteId === noteId).map((l) => l.taskId);
     const allTasks = useAppStore.getState().tasks;
     const tagSet = new Set<string>();
-    for (const tid of taskIds) { const task = allTasks.find((t) => t.id === tid); if (task) tagSet.add(task.category); }
+    for (const tid of taskIds) { const task = allTasks.find((t) => t.id === tid); if (task) task.tags.forEach((tg) => tagSet.add(tg)); }
     return Array.from(tagSet);
   };
 
@@ -99,10 +127,25 @@ function NotesWidget() {
     if (linked.includes(tagName)) {
       const taskIds = noteTaskLinks.filter((l) => l.noteId === selectedNote.id).map((l) => l.taskId);
       const allTasks = useAppStore.getState().tasks;
-      for (const tid of taskIds) { const task = allTasks.find((t) => t.id === tid); if (task && task.category === tagName) await unlinkNote(selectedNote.id, tid); }
+      for (const tid of taskIds) { const task = allTasks.find((t) => t.id === tid); if (task && task.tags.includes(tagName)) await unlinkNote(selectedNote.id, tid); }
     } else {
       await linkNoteToTagName(selectedNote.id, tagName);
     }
+  };
+
+  useEffect(() => { localStorage.setItem("vellum_notes_list_width", String(listWidth)); }, [listWidth]);
+
+  const onSplitDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragRef.current = { startX: e.clientX, startW: listWidth };
+    const move = (ev: MouseEvent) => {
+      if (!splitDragRef.current) return;
+      const dx = ev.clientX - splitDragRef.current.startX;
+      setListWidth(Math.min(400, Math.max(90, splitDragRef.current.startW + dx)));
+    };
+    const up = () => { splitDragRef.current = null; window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   };
 
   const handleAddNote = async () => {
@@ -119,6 +162,34 @@ function NotesWidget() {
   const txtBody2 = tw("text-gray-700", "text-white/80");
   const txtBody3 = tw("text-gray-500", "text-white/60");
   const txtMuted = tw("text-gray-400", "text-white/30");
+
+  // Single note row; reused for static + draggable rendering. dnd props are
+  // optional so the same markup works in both modes. Merges the drag ref with
+  // highlightRef when this note is the highlighted one.
+  const renderNoteItem = (
+    note: typeof notes[0],
+    dragRef?: (el: HTMLElement | null) => void,
+    dragProps?: object,
+    handleProps?: object | null,
+    isDragging?: boolean
+  ) => {
+    const isSelected = note.id === activeNoteId;
+    const isHighlighted = highlightedNoteId === note.id;
+    const setRef = (el: HTMLDivElement | null) => {
+      if (dragRef) dragRef(el);
+      if (isHighlighted) highlightRef.current = el;
+    };
+    return (
+      <div key={note.id} ref={setRef} {...(dragProps || {})} {...(handleProps || {})}
+        onClick={() => { setActiveNoteId(note.id); setHighlightedNoteId(note.id); }}
+        className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs leading-relaxed ${isDragging ? "bg-zinc-800 text-white shadow-xl ring-1 ring-indigo-400/40" : isSelected ? "bg-indigo-500/20 text-indigo-600" : `${txtBody2} hover:bg-white/5`} ${isHighlighted && !isDragging ? "ring-1 ring-indigo-400/40" : ""}`}
+      >
+        <span className={`flex-1 truncate ${tw("text-gray-800", "text-white/70")}`}>{note.title}</span>
+        <button onClick={(e) => { e.stopPropagation(); setConfirmDelete({ noteId: note.id, noteTitle: note.title }); }}
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-500 flex items-center" title="Delete note"><X size={12} strokeWidth={2} /></button>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -147,25 +218,42 @@ function NotesWidget() {
             <span className={`text-[13px] font-semibold tracking-tight ${txtBody}`}>Notes</span>
           </div>
           <div className="flex-1 flex overflow-hidden">
-            <div className={`w-35 shrink-0 border-r ${tw("border-gray-200", "border-white/10")} overflow-y-auto p-2 space-y-1`}>
+            <div style={{ width: listWidth }} className={`shrink-0 border-r ${tw("border-gray-200", "border-white/10")} overflow-y-auto p-2 space-y-1`}>
               <button onClick={() => setAddingNote(true)} className={`w-full text-xs font-medium ${tw("text-indigo-600 bg-indigo-100/30", "text-indigo-300 bg-indigo-500/20")} hover:bg-indigo-500/30 transition-colors px-2 py-1.5 rounded-lg mb-2`}>
                 + New Note
               </button>
+              <input type="text" value={noteSearch} onChange={(e) => setNoteSearch(e.target.value)} placeholder="Search notes…"
+                className={`w-full mb-2 bg-white/5 border ${tw("border-gray-300", "border-white/10")} rounded-lg px-2 py-1 text-[11px] ${tw("text-gray-900", "text-white/90")} placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors`} />
               {notes.length === 0 && <p className={`${txtMuted} text-xs text-center pt-2`}>No notes.</p>}
-              {notes.map((note) => {
-                const isSelected = note.id === activeNoteId;
-                const isHighlighted = highlightedNoteId === note.id;
-                return (
-                  <div key={note.id} ref={isHighlighted ? highlightRef : undefined} onClick={() => { setActiveNoteId(note.id); setHighlightedNoteId(note.id); }}
-                    className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs leading-relaxed ${isSelected ? "bg-indigo-500/20 text-indigo-600" : `${txtBody2} hover:bg-white/5`} ${isHighlighted ? "ring-1 ring-indigo-400/40" : ""}`}
-                  >
-                    <span className={`flex-1 truncate ${tw("text-gray-800", "text-white/70")}`}>{note.title}</span>
-                    <button onClick={(e) => { e.stopPropagation(); setConfirmDelete({ noteId: note.id, noteTitle: note.title }); }}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-500 flex items-center" title="Delete note"><X size={12} strokeWidth={2} /></button>
-                  </div>
-                );
-              })}
+              {notes.length > 0 && filteredNotes.length === 0 && <p className={`${txtMuted} text-xs text-center pt-2`}>No match.</p>}
+              {/* Drag-reorder only on the full (unsearched) list — reordering a
+                  filtered subset is ambiguous. While searching, render plain. */}
+              {canReorderNotes ? (
+                <DragDropContext onDragEnd={onNotesDragEnd}>
+                  <Droppable droppableId="notes-list">
+                    {(dp) => (
+                      <div ref={dp.innerRef} {...dp.droppableProps} className="space-y-1">
+                        {filteredNotes.map((note, idx) => (
+                          <Draggable key={note.id} draggableId={note.id} index={idx}>
+                            {(drag, snapshot) => {
+                              const node = renderNoteItem(note, drag.innerRef, drag.draggableProps, drag.dragHandleProps, snapshot.isDragging);
+                              // Portal dragging clone to <body> — Rnd's transform offsets it otherwise.
+                              return snapshot.isDragging ? createPortal(node, document.body) : node;
+                            }}
+                          </Draggable>
+                        ))}
+                        {dp.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+              ) : (
+                filteredNotes.map((note) => renderNoteItem(note))
+              )}
             </div>
+            {/* Draggable splitter: resize note list vs editor canvas. */}
+            <div onMouseDown={onSplitDown} title="Drag to resize"
+              className={`shrink-0 w-1 cursor-col-resize ${tw("hover:bg-indigo-300/50", "hover:bg-indigo-400/40")} transition-colors`} />
             <div className="flex-1 flex flex-col overflow-hidden">
               {addingNote ? (
                 <div className="p-3 space-y-2">
@@ -196,17 +284,19 @@ function NotesWidget() {
                       />
                     )}
                   </div>
-                  <div className="flex-1 overflow-y-auto p-3">
-                    <textarea value={contentValue} onChange={(e) => handleContentChange(e.target.value)}
-                      className={`w-full h-full bg-transparent text-sm leading-relaxed ${txtBody2} outline-none border-none resize-none`} placeholder="Note content..."
-                    />
+                  <div className="flex-1 overflow-hidden p-3">
+                    <RichTextEditor value={contentValue} onChange={handleContentChange} dark={!isLight} />
                   </div>
                   <div className={`px-3 pb-3 pt-1 border-t ${tw("border-gray-200", "border-white/5")}`}>
                     <details className="group">
                       <summary className={`text-[10px] ${txtBody3} hover:opacity-80 cursor-pointer transition-colors select-none mb-1`}>Link to tags…</summary>
+                      {tags.length > 5 && (
+                        <input type="text" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} placeholder="Search tags…"
+                          className={`w-full mb-1.5 bg-white/5 border ${tw("border-gray-300", "border-white/10")} rounded px-2 py-1 text-[10px] ${tw("text-gray-900", "text-white/90")} placeholder-white/30 outline-none focus:border-indigo-400/60`} />
+                      )}
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {tags.length === 0 && <span className={`text-[10px] ${txtMuted}`}>No tags yet.</span>}
-                        {tags.map((tag) => {
+                        {tags.filter((t) => t.toLowerCase().includes(tagFilter.trim().toLowerCase())).map((tag) => {
                           const linked = linkedTagsForNote(selectedNote.id).includes(tag);
                           return (
                             <button key={tag} onClick={() => handleTagToggle(tag)}

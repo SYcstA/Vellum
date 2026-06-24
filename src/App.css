@@ -136,3 +136,120 @@ a,
 [data-theme="light"] .text-emerald-300,
 [data-theme="light"] .text-emerald-300\/70 { color: #047857; }
 [data-theme="light"] .text-red-300 { color: #b91c1c; }
+
+/* ── TinyMCE (oxide) glass integration ───────────────────────────────────
+   Oxide ships a white toolbar + white iframe canvas, which broke the dark/
+   pure-black themes (notes editor stayed white). Strip the white chrome so the
+   editor sits directly on the widget's glass surface; the iframe BODY text
+   colour is themed via RichTextEditor's content_style (dark → #e5e7eb).
+   Canvas BG transparent → glass/theme shows through (black theme → dark canvas,
+   white text). */
+.tox.tox-tinymce {
+  border: none !important;
+  background: transparent !important;
+}
+.tox .tox-edit-area,
+.tox .tox-edit-area__iframe {
+  background-color: transparent !important;
+}
+.tox .tox-editor-header,
+.tox .tox-toolbar-overlord,
+.tox .tox-toolbar,
+.tox .tox-toolbar__primary {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+/* Dark + pure-black (App.tsx maps both to data-theme="dark"): kill the white
+   button/group faces oxide paints, light up the icons. */
+[data-theme="dark"] .tox .tox-toolbar__group,
+[data-theme="dark"] .tox .tox-tbtn {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+[data-theme="dark"] .tox .tox-tbtn svg {
+  fill: currentColor !important;
+}
+[data-theme="dark"] .tox .tox-tbtn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+[data-theme="dark"] .tox .tox-tbtn--enabled,
+[data-theme="dark"] .tox .tox-tbtn--enabled:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+[data-theme="dark"] .tox .tox-toolbar__group:not(:last-of-type) {
+  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+/* Floating UI (link dialog, menus, the "…" overflow toolbar) needs a SOLID dark
+   surface in dark mode — otherwise oxide's white box + our light icons render
+   white-on-white (invisible). */
+[data-theme="dark"] .tox .tox-dialog,
+[data-theme="dark"] .tox .tox-menu,
+[data-theme="dark"] .tox .tox-pop__dialog,
+[data-theme="dark"] .tox .tox-toolbar__overflow,
+[data-theme="dark"] .tox .tox-collection,
+[data-theme="dark"] .tox .tox-collection__item {
+  background-color: #18181b !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+/* The overflow toolbar shows tox-tbtn icons — keep them light + solid bg. */
+[data-theme="dark"] .tox .tox-toolbar__overflow .tox-tbtn,
+[data-theme="dark"] .tox .tox-toolbar__overflow .tox-tbtn svg {
+  color: rgba(255, 255, 255, 0.85) !important;
+  fill: currentColor !important;
+}
+[data-theme="dark"] .tox .tox-collection__item--active,
+[data-theme="dark"] .tox .tox-collection__item:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+/* Link dialog inputs. */
+[data-theme="dark"] .tox .tox-textfield,
+[data-theme="dark"] .tox .tox-listbox {
+  background-color: #27272a !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+/* The pop arrow tip blends with the dark surface. */
+[data-theme="dark"] .tox .tox-pop::before,
+[data-theme="dark"] .tox .tox-pop::after { border-color: transparent !important; }
+
+/* Link dialog: field labels were invisible (oxide renders them dark, dark bg). */
+[data-theme="dark"] .tox .tox-label,
+[data-theme="dark"] .tox .tox-form__group label,
+[data-theme="dark"] .tox .tox-form__group .tox-label {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 11px !important;
+}
+/* Dialog header + footer chrome. */
+[data-theme="dark"] .tox .tox-dialog__header {
+  background-color: #18181b !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 10px 16px !important;
+}
+[data-theme="dark"] .tox .tox-dialog__body,
+[data-theme="dark"] .tox .tox-dialog__body-content {
+  background-color: #18181b !important;
+}
+[data-theme="dark"] .tox .tox-dialog__footer {
+  background-color: #18181b !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+/* Buttons: Cancel = zinc, Save = indigo. */
+[data-theme="dark"] .tox .tox-button--secondary {
+  background-color: #3f3f46 !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+[data-theme="dark"] .tox .tox-button:not(.tox-button--secondary):not(.tox-button--icon) {
+  background-color: #6366f1 !important;
+  border-color: #6366f1 !important;
+  color: #fff !important;
+}
+/* Link context toolbar (quick popup on link hover). */
+[data-theme="dark"] .tox .tox-pop .tox-toolbar {
+  background-color: #27272a !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
