@@ -204,6 +204,14 @@ a,
 [data-theme="dark"] .tox .tox-collection__item:hover {
   background-color: rgba(255, 255, 255, 0.12) !important;
 }
+/* Dialog body copy (e.g. the "add https:// prefix?" confirm) is dark ink in
+   oxide — invisible on our dark surface. */
+[data-theme="dark"] .tox .tox-dialog__body-content,
+[data-theme="dark"] .tox .tox-dialog__body-content p,
+[data-theme="dark"] .tox .tox-dialog__body-content div,
+[data-theme="dark"] .tox .tox-dialog__title {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
 /* Link dialog inputs. */
 [data-theme="dark"] .tox .tox-textfield,
 [data-theme="dark"] .tox .tox-listbox {
