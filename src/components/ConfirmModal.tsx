@@ -8,6 +8,11 @@ type ConfirmModalProps = {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Optional middle action (e.g. "Discard"), shown between Cancel and Confirm. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  /** "danger" (default, red) or "primary" (indigo) for the confirm button. */
+  confirmTone?: "danger" | "primary";
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -18,6 +23,9 @@ function ConfirmModal({
   message,
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
+  secondaryLabel,
+  onSecondary,
+  confirmTone = "danger",
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -56,10 +64,18 @@ function ConfirmModal({
           >
             {cancelLabel}
           </button>
+          {secondaryLabel && onSecondary && (
+            <button
+              onClick={onSecondary}
+              className="text-xs font-medium text-red-300 hover:text-red-200 bg-red-500/15 hover:bg-red-500/25 transition-colors px-3 py-1.5 rounded-lg"
+            >
+              {secondaryLabel}
+            </button>
+          )}
           <button
             ref={confirmRef}
             onClick={onConfirm}
-            className="text-xs font-medium text-white bg-red-500/50 hover:bg-red-500/70 transition-colors px-4 py-1.5 rounded-lg"
+            className={`text-xs font-medium text-white transition-colors px-4 py-1.5 rounded-lg ${confirmTone === "primary" ? "bg-indigo-500/70 hover:bg-indigo-500/90" : "bg-red-500/50 hover:bg-red-500/70"}`}
           >
             {confirmLabel}
           </button>

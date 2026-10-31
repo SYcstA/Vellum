@@ -8,6 +8,7 @@ import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
 import { X, Check, Trash2 } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
+import { acceleratorFromEvent, prettyShortcut, DEFAULT_GHOST_SHORTCUT } from "../utils/shortcut";
 
 function SettingsWidget() {
   const toggleSettings = useAppStore((s) => s.toggleSettings);
@@ -29,32 +30,29 @@ function SettingsWidget() {
   const [capturingShortcut, setCapturingShortcut] = useState(false);
   const [shortcutError, setShortcutError] = useState("");
 
-  // Build a Tauri accelerator string from a key event; require >=1 modifier so
-  // the global hotkey can't collide with plain typing.
-  const captureShortcut = async (e: React.KeyboardEvent) => {
-    e.preventDefault();
-    const k = e.key;
-    if (["Control", "Alt", "Shift", "Meta"].includes(k)) return; // wait for a real key
-    const mods: string[] = [];
-    if (e.ctrlKey) mods.push("Control");
-    if (e.altKey) mods.push("Alt");
-    if (e.shiftKey) mods.push("Shift");
-    if (e.metaKey) mods.push("Super");
-    let main = "";
-    if (/^[a-z]$/i.test(k)) main = k.toUpperCase();
-    else if (/^[0-9]$/.test(k)) main = k;
-    else if (/^F\d{1,2}$/.test(k)) main = k;
-    else if (k === " ") main = "Space";
-    if (!main || mods.length === 0) { setShortcutError("Need a modifier (Ctrl/Alt/Shift) + a key."); return; }
-    const acc = [...mods, main].join("+");
+  const [shortcutPreview, setShortcutPreview] = useState("");
+
+  const applyShortcut = async (acc: string) => {
     try {
       await invoke("set_ghost_shortcut", { accelerator: acc });
       setGhostShortcut(acc);
       setShortcutError("");
       setCapturingShortcut(false);
+      setShortcutPreview("");
     } catch (err) {
       setShortcutError(String(err));
     }
+  };
+
+  // Esc cancels; otherwise build the accelerator from the pressed combo and show
+  // the held modifiers live so the user sees what is being captured.
+  const captureShortcut = async (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    if (e.key === "Escape") { setCapturingShortcut(false); setShortcutPreview(""); setShortcutError(""); return; }
+    const r = acceleratorFromEvent(e.nativeEvent);
+    setShortcutPreview(r.preview);
+    if (r.error) { setShortcutError(r.error); return; }
+    if (r.acc) await applyShortcut(r.acc);
   };
 
   const handleBrowseWallpaper = async () => {
@@ -176,14 +174,23 @@ function SettingsWidget() {
             {/* Ghost Mode Shortcut */}
             <div>
               <p className={`text-xs ${textSecondary} mb-2`}>Ghost Mode Shortcut</p>
-              <button
-                onKeyDown={capturingShortcut ? captureShortcut : undefined}
-                onClick={() => { setCapturingShortcut(true); setShortcutError(""); }}
-                onBlur={() => setCapturingShortcut(false)}
-                className={`w-full text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${capturingShortcut ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
-              >
-                {capturingShortcut ? "Press keys… (Esc-able: click away)" : <>Current: <span className="font-mono">{ghostShortcut}</span> — click to rebind</>}
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  onKeyDown={capturingShortcut ? captureShortcut : undefined}
+                  onClick={() => { setCapturingShortcut(true); setShortcutError(""); setShortcutPreview(""); }}
+                  onBlur={() => { setCapturingShortcut(false); setShortcutPreview(""); }}
+                  className={`flex-1 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${capturingShortcut ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
+                >
+                  <span className="font-mono">{capturingShortcut ? (shortcutPreview || "Press your combo…") : prettyShortcut(ghostShortcut)}</span>
+                </button>
+                {ghostShortcut !== DEFAULT_GHOST_SHORTCUT && !capturingShortcut && (
+                  <button onClick={() => applyShortcut(DEFAULT_GHOST_SHORTCUT)} title={`Reset to ${prettyShortcut(DEFAULT_GHOST_SHORTCUT)}`}
+                    className={`text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${isLight ? "bg-gray-100 text-gray-500 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/50 border-white/10 hover:text-white/90 hover:border-white/30"}`}>Reset</button>
+                )}
+              </div>
+              <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>
+                {capturingShortcut ? "Esc to cancel." : "Click, then press the new combo."}
+              </p>
               {shortcutError && <p className="text-[10px] text-red-400 mt-1">{shortcutError}</p>}
             </div>
             {/* Danger Zone */}

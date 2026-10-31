@@ -33,6 +33,7 @@ import {
   getDb,
 } from "./db";
 import { stripHtml } from "../utils/notes";
+import { DEFAULT_GHOST_SHORTCUT } from "../utils/shortcut";
 
 export type Task = {
   id: string;
@@ -260,7 +261,7 @@ export const useAppStore = create<AppState>()(
       widgetThemeColor: "dark" as const,
       widgetOpacity: 1.0,
       wallpaperPath: null,
-      ghostShortcut: "Alt+G",
+      ghostShortcut: DEFAULT_GHOST_SHORTCUT,
       widgetPositions: {
         todo: { x: 50, y: 50, width: 420, height: 400 },
         calendar: { x: 500, y: 50, width: 360, height: 390 },

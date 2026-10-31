@@ -12,6 +12,7 @@ import WindowControls from "./components/WindowControls";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "./store/useAppStore";
 import { useWindowBoundaryGuard } from "./utils/window";
+import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT } from "./utils/shortcut";
 import { initSchema, markSeeded } from "./store/db";
 import "./App.css";
 
@@ -47,10 +48,15 @@ function App() {
       } catch (err) {
         console.error("Database init failed:", err);
       }
-      // Re-apply the user's saved Ghost-Mode hotkey (Rust registers Alt+G by
-      // default; this overrides it if the user rebound the combo).
-      const saved = useAppStore.getState().ghostShortcut;
-      if (saved && saved !== "Alt+G") {
+      // Re-apply the user's saved Ghost-Mode hotkey (Rust registers the default
+      // on startup; this overrides it if the user rebound the combo). The old
+      // Alt+G default migrates to the new default.
+      let saved = useAppStore.getState().ghostShortcut;
+      if (saved === LEGACY_GHOST_SHORTCUT) {
+        saved = DEFAULT_GHOST_SHORTCUT;
+        useAppStore.getState().setGhostShortcut(saved);
+      }
+      if (saved && saved !== DEFAULT_GHOST_SHORTCUT) {
         try { await invoke("set_ghost_shortcut", { accelerator: saved }); }
         catch (err) { console.error("Re-apply ghost shortcut failed:", err); }
       }

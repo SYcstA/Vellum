@@ -222,8 +222,11 @@ export async function fetchTaskTitlesByDate(
 ): Promise<string[]> {
   const d = await getDb();
   const column = type === "completion" ? "Completion_Date" : "Deadline_Date";
+  // A completed task's deadline is resolved: it shows under "Completed" only,
+  // matching the calendar dots (a done task never also counts as a deadline).
+  const pendingOnly = type === "deadline" ? "AND Status <> 'completed'" : "";
   const rows = await d.select<{ Title: string }[]>(
-    `SELECT Title FROM Tasks WHERE ${column} = ?1`,
+    `SELECT Title FROM Tasks WHERE ${column} = ?1 ${pendingOnly}`,
     [date]
   );
   return rows.map((r) => r.Title);

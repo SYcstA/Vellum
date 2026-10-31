@@ -8,6 +8,7 @@ import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
 import { fakeMaximize, restoreWindow, isFakeMaximized } from "../utils/window";
 import QuitModal from "./QuitModal";
+import { prettyShortcut } from "../utils/shortcut";
 import { Ghost, Minus, Square, Copy, X } from "lucide-react";
 
 function WindowControls() {
@@ -63,10 +64,10 @@ function WindowControls() {
           style={glassStyle(widgetThemeColor, widgetOpacity)}
         >
           <div className="relative group">
-            <button onClick={handleGhost} className={`${ghost ? "text-sky-300" : txtBtn} flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/10`} title={`Ghost Mode — make the window click-through (Press ${ghostShortcut} to exit)`}><Ghost size={15} strokeWidth={1.75} /></button>
+            <button onClick={handleGhost} className={`${ghost ? "text-sky-300" : txtBtn} flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/10`} title={`Ghost Mode — make the window click-through (Press ${prettyShortcut(ghostShortcut)} to exit)`}><Ghost size={15} strokeWidth={1.75} /></button>
             <div className="absolute top-full right-0 mt-1.5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap">
               <div className="glass-noise relative rounded-md px-2 py-1 text-[10px] font-mono tracking-tight text-white/80" style={glassStyle(widgetThemeColor, Math.max(widgetOpacity, 0.9))}>
-                Ghost Mode · {ghostShortcut} to exit
+                Ghost Mode · {prettyShortcut(ghostShortcut)} to exit
               </div>
             </div>
           </div>
@@ -75,6 +76,15 @@ function WindowControls() {
           <button onClick={() => setShowQuitModal(true)} className={`${txtBtn} flex items-center justify-center w-7 h-7 rounded-lg hover:bg-red-500/30 hover:text-white`} title="Quit"><X size={15} strokeWidth={2} /></button>
         </div>
       </div>
+      {/* Ghost Mode indicator: a click-through window can't take clicks, so show
+          a non-interactive badge with the exit hint (tray menu also exits). */}
+      {ghost && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none select-none">
+          <div className="glass-noise relative rounded-full px-4 py-2 text-xs font-mono text-sky-200 animate-pulse" style={glassStyle(widgetThemeColor, Math.max(widgetOpacity, 0.9))}>
+            Ghost Mode ON · press {prettyShortcut(ghostShortcut)} or use tray to exit
+          </div>
+        </div>
+      )}
       <QuitModal open={showQuitModal} onCancel={() => setShowQuitModal(false)} />
     </>
   );

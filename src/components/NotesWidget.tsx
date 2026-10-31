@@ -148,6 +148,21 @@ function NotesWidget() {
     window.addEventListener("mouseup", up);
   };
 
+  // Leaving the "New Note" form (picking another note, or Cancel) = discarding the
+  // draft. If there is anything typed, ask first and offer to save it.
+  const hasDraft = addingNote && (newNoteTitle.trim() !== "" || newNoteContent.trim() !== "");
+  const [pendingLeave, setPendingLeave] = useState<{ noteId?: string } | null>(null);
+
+  const finishLeave = (target: { noteId?: string }) => {
+    setAddingNote(false); setNewNoteTitle(""); setNewNoteContent("");
+    if (target.noteId) { setActiveNoteId(target.noteId); setHighlightedNoteId(target.noteId); }
+  };
+
+  const requestLeaveDraft = (target: { noteId?: string }) => {
+    if (hasDraft) setPendingLeave(target);
+    else finishLeave(target);
+  };
+
   const handleAddNote = async () => {
     const title = newNoteTitle.trim() || "Untitled";
     const content = newNoteContent.trim() || "New note content...";
@@ -181,7 +196,7 @@ function NotesWidget() {
     };
     return (
       <div key={note.id} ref={setRef} {...(dragProps || {})} {...(handleProps || {})}
-        onClick={() => { setActiveNoteId(note.id); setHighlightedNoteId(note.id); }}
+        onClick={() => requestLeaveDraft({ noteId: note.id })}
         className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs leading-relaxed ${isDragging ? "bg-zinc-800 text-white shadow-xl ring-1 ring-indigo-400/40" : isSelected ? "bg-indigo-500/20 text-indigo-600" : `${txtBody2} hover:bg-white/5`} ${isHighlighted && !isDragging ? "ring-1 ring-indigo-400/40" : ""}`}
       >
         <span className={`flex-1 truncate ${tw("text-gray-800", "text-white/70")}`}>{note.title}</span>
@@ -266,7 +281,7 @@ function NotesWidget() {
                   <div className="flex gap-2">
                     <button onClick={handleAddNote} disabled={!newNoteTitle.trim() && !newNoteContent.trim()}
                       className={`flex-1 text-xs font-medium ${tw("text-white bg-indigo-600", "text-white bg-indigo-500/40")} hover:bg-indigo-500/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-lg`}>Save</button>
-                    <button onClick={() => { setAddingNote(false); setNewNoteTitle(""); setNewNoteContent(""); }}
+                    <button onClick={() => requestLeaveDraft({})}
                       className={`text-xs ${tw("text-gray-500 hover:text-gray-800", "text-white/50 hover:text-white/80")} transition-colors px-3 py-1.5`}>Cancel</button>
                   </div>
                 </div>
@@ -319,6 +334,24 @@ function NotesWidget() {
           </div>
         </div>
       </Rnd>
+      <ConfirmModal
+        open={pendingLeave !== null}
+        title="Unsaved new note"
+        message={`Your draft will be lost if you leave. Save it first?${newNoteTitle.trim() ? "" : ' (No title yet, it will be saved as "Untitled".)'}`}
+        confirmLabel="Save note"
+        confirmTone="primary"
+        secondaryLabel="Discard"
+        cancelLabel="Keep editing"
+        onConfirm={async () => {
+          const target = pendingLeave;
+          setPendingLeave(null);
+          if (!target) return;
+          await handleAddNote(); // saves + closes the form
+          finishLeave(target);
+        }}
+        onSecondary={() => { const t = pendingLeave; setPendingLeave(null); if (t) finishLeave(t); }}
+        onCancel={() => setPendingLeave(null)}
+      />
       <ConfirmModal
         open={confirmDelete !== null}
         title="Delete Note"

@@ -17,12 +17,26 @@ struct GhostShortcut(Mutex<Option<Shortcut>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Default Ghost-Mode hotkey (Alt+G). User can rebind via set_ghost_shortcut;
+    // Default Ghost-Mode hotkey (Ctrl+Alt+G). User can rebind via set_ghost_shortcut;
     // the active combo lives in GhostShortcut state and the handler toggles
     // Ghost Mode whenever the registered combo is pressed.
-    let ghost_default = Shortcut::new(Some(Modifiers::ALT), Code::KeyG);
+    let ghost_default = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyG);
 
     tauri::Builder::default()
+        // Must be the FIRST plugin. A second launch exits immediately and hands
+        // off to the running instance, which is brought to the front instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+                if let Some(toggle_mi) = app.try_state::<ToggleMenuItem>() {
+                    if let Ok(toggle) = toggle_mi.0.lock() {
+                        let _ = toggle.set_text("Hide Dashboard");
+                    }
+                }
+            }
+        }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -44,6 +58,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        // Required for openUrl() (note links). Without it every open call fails.
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -224,10 +240,23 @@ fn set_ghost_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), 
     let sc: Shortcut = accelerator
         .parse()
         .map_err(|e| format!("invalid shortcut '{accelerator}': {e:?}"))?;
-    let _ = app.global_shortcut().unregister_all();
-    app.global_shortcut()
-        .register(sc.clone())
-        .map_err(|e| format!("register failed: {e}"))?;
+    let old = app
+        .try_state::<GhostShortcut>()
+        .and_then(|s| s.0.lock().ok().and_then(|g| g.clone()));
+    if old.as_ref() == Some(&sc) {
+        return Ok(());
+    }
+    if let Some(o) = &old {
+        let _ = app.global_shortcut().unregister(o.clone());
+    }
+    if let Err(e) = app.global_shortcut().register(sc.clone()) {
+        // Keep the previous hotkey alive so a failed rebind never leaves the
+        // user without a way to leave Ghost Mode.
+        if let Some(o) = old {
+            let _ = app.global_shortcut().register(o);
+        }
+        return Err(format!("'{accelerator}' is taken by another app ({e})"));
+    }
     if let Some(state) = app.try_state::<GhostShortcut>() {
         if let Ok(mut g) = state.0.lock() {
             *g = Some(sc);
