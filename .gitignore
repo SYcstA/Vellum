@@ -30,8 +30,16 @@ dist-ssr
 # Rust build artifacts (very large, do not commit)
 src-tauri/target/
 
-# Claude Code session files
+# AI dev tooling: local-only, never shipped to GitHub (only app source is public)
 .claude/
+CLAUDE.md
+.claudeignore
+HANDOFF.md
+STATE_OF_THE_UNION.md
+graphify-out/
+.graphifyignore
+docs/superpowers/
+docs/INDEX.md
 
 # SQLite databases (user data, never commit)
 *.db
