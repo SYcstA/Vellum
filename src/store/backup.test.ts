@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backupFileName, parseBackup, preImportFileName, serializeBackup } from "./backup";
+import { backupFileName, backupsToDelete, parseBackup, preImportFileName, serializeBackup } from "./backup";
 
 const sample = () => ({
   categories: [
@@ -156,5 +156,34 @@ describe("backup file names", () => {
   });
   it("names the automatic pre-import export by local date and time", () => {
     expect(preImportFileName(d)).toBe("vellum-pre-import-20261101-090507.json");
+  });
+});
+
+describe("backupsToDelete (keep only the newest safety copies)", () => {
+  const names = (n: number) =>
+    Array.from({ length: n }, (_, i) => `vellum-pre-import-20261101-0900${String(i).padStart(2, "0")}.json`);
+
+  it("deletes nothing while within the limit", () => {
+    expect(backupsToDelete(names(5), 5)).toEqual([]);
+    expect(backupsToDelete(names(2), 5)).toEqual([]);
+  });
+
+  it("deletes the oldest beyond the limit", () => {
+    const all = names(8);
+    expect(backupsToDelete(all, 5).sort()).toEqual(all.slice(0, 3));
+  });
+
+  it("is order-independent", () => {
+    const all = names(7);
+    expect(backupsToDelete([...all].reverse(), 5).sort()).toEqual(all.slice(0, 2));
+  });
+
+  it("never touches files that are not safety copies", () => {
+    const mine = ["notes.txt", "vellum-backup-2026-11-01.json", "vellum-pre-import-oops.json"];
+    expect(backupsToDelete([...mine, ...names(7)], 5).sort()).toEqual(names(7).slice(0, 2));
+  });
+
+  it("keeps at least one even if asked for zero or less", () => {
+    expect(backupsToDelete(names(3), 0)).toEqual(names(3).slice(0, 2));
   });
 });

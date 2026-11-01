@@ -3,7 +3,7 @@ import { Rnd } from "react-rnd";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
@@ -202,6 +202,22 @@ function SettingsWidget() {
     }
   };
 
+  const [reminderInfo, setReminderInfo] = useState("");
+  const lastSent = (() => { try { return localStorage.getItem("vellum_last_reminder"); } catch { return null; } })();
+
+  // Separates "Windows is not showing Vellum's toasts" from "no task qualified today".
+  const handleTestNotification = async () => {
+    try {
+      const ok = (await isPermissionGranted()) || (await requestPermission()) === "granted";
+      if (!ok) { setReminderError("Notifications are blocked for Vellum."); return; }
+      sendNotification({ title: "Vellum", body: "Test: your deadline reminders will look like this." });
+      setReminderError("");
+      setReminderInfo("Test sent. If nothing appeared: Windows Settings → System → Notifications → turn on Vellum, and switch Do Not Disturb / Focus off.");
+    } catch (err) {
+      setReminderError(String(err));
+    }
+  };
+
   const handleToggleWhenClosed = async () => {
     try {
       await invoke("set_reminder_task", { enabled: !reminderWhenClosed, time: reminderTime });
@@ -384,8 +400,17 @@ function SettingsWidget() {
                   {reminderWhenClosed && <Check size={13} strokeWidth={2.5} />}Also remind when Vellum is closed
                 </button>
               )}
+              {remindersEnabled && (
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className={`text-[10px] ${isLight ? "text-gray-400" : "text-white/30"}`}>
+                    Last notification: {lastSent ?? "none yet"}
+                  </span>
+                  <button onClick={handleTestNotification} className={`text-[10px] font-medium px-2 py-1 rounded-lg border transition-colors ${isLight ? "bg-gray-100 text-gray-600 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/60 border-white/10 hover:text-white/90 hover:border-white/30"}`}>Send test</button>
+                </div>
+              )}
+              {reminderInfo && <p className={`text-[10px] mt-1 ${isLight ? "text-gray-500" : "text-white/50"}`}>{reminderInfo}</p>}
               <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>
-                One toast a day for tasks due or past due (24-hour clock). {reminderWhenClosed ? "A Windows scheduled task wakes Vellum in the background at that time, even after Quit." : "Works while Vellum is running (the tray counts)."}
+                Time is 24-hour: hour on the left, minute on the right. One toast a day for tasks due or past due. {reminderWhenClosed ? "A Windows scheduled task wakes Vellum in the background at that time, even after Quit." : "Works while Vellum is running (the tray counts)."}
               </p>
               {reminderError && <p className="text-[10px] text-red-400 mt-1">{reminderError}</p>}
             </div>

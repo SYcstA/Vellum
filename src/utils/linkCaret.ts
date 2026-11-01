@@ -1,18 +1,38 @@
+const ZWNBSP = /^﻿*$/;
+
+/** Text length without a trailing invisible U+FEFF (TinyMCE's inline-boundary caret marker). */
+function visibleLength(text: string): number {
+  return text.replace(/﻿+$/, "").length;
+}
+
+/** True when everything after `node` inside `parent` is only invisible U+FEFF text. */
+function onlyMarkersAfter(node: Node, parent: Node): boolean {
+  for (let n = node.nextSibling; n; n = n.nextSibling) {
+    if (n.nodeType !== Node.TEXT_NODE || !ZWNBSP.test((n as Text).data)) return false;
+  }
+  return parent.nodeType !== undefined;
+}
+
 /**
  * If the collapsed caret sits at the very end of a link's content, return that
  * link; otherwise null. Used so typing right after a link starts plain text
  * instead of extending the link (links are edited via right-click instead).
+ * TinyMCE keeps an invisible U+FEFF at the end of a link while the caret is
+ * there, so that marker does not count as content.
  */
 export function linkEndingAtCaret(range: Range): HTMLAnchorElement | null {
   if (!range.collapsed) return null;
   let node: Node = range.startContainer;
-  const length = node.nodeType === Node.TEXT_NODE ? (node as Text).length : node.childNodes.length;
-  if (range.startOffset !== length) return null;
-  // Climb while we are the last thing in each parent, until we reach the <a>.
+  if (node.nodeType === Node.TEXT_NODE) {
+    if (range.startOffset < visibleLength((node as Text).data)) return null;
+  } else if (range.startOffset !== node.childNodes.length) {
+    return null;
+  }
+  // Climb while nothing but markers follow us in each parent, until we reach the <a>.
   while (node) {
     if (node.nodeName === "A") return node as HTMLAnchorElement;
     const parent: Node | null = node.parentNode;
-    if (!parent || parent.lastChild !== node) return null;
+    if (!parent || !onlyMarkersAfter(node, parent)) return null;
     node = parent;
   }
   return null;

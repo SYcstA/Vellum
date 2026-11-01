@@ -64,4 +64,28 @@ describe("linkEndingAtCaret", () => {
     const text = p.querySelector("b")!.firstChild as Text;
     expect(linkEndingAtCaret(caret(text, 4))).toBeNull();
   });
+
+  // TinyMCE parks an invisible U+FEFF at the end of a link while the caret is there.
+  it("ignores a trailing U+FEFF inside the same text node", () => {
+    const p = document.createElement("p");
+    p.innerHTML = '<a href="https://x.dev">link﻿</a>';
+    const text = p.querySelector("a")!.firstChild as Text;
+    expect(linkEndingAtCaret(caret(text, 4))).toBe(p.querySelector("a"));
+    expect(linkEndingAtCaret(caret(text, 5))).toBe(p.querySelector("a"));
+  });
+
+  it("ignores a U+FEFF-only text node after the caret's node", () => {
+    const p = document.createElement("p");
+    p.innerHTML = '<a href="https://x.dev">link</a>';
+    const a = p.querySelector("a")!;
+    a.appendChild(document.createTextNode("﻿"));
+    expect(linkEndingAtCaret(caret(a.firstChild!, 4))).toBe(a);
+  });
+
+  it("still returns null in the middle of the text when a U+FEFF follows", () => {
+    const p = document.createElement("p");
+    p.innerHTML = '<a href="https://x.dev">link﻿</a>';
+    const text = p.querySelector("a")!.firstChild as Text;
+    expect(linkEndingAtCaret(caret(text, 2))).toBeNull();
+  });
 });

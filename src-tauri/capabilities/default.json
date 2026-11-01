@@ -31,6 +31,8 @@
     "dialog:allow-save",
     "fs:allow-write-text-file",
     "fs:allow-read-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-remove",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "$APPDATA/backups" }, { "path": "$APPDATA/backups/**" }]

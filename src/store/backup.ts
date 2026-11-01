@@ -183,3 +183,15 @@ export function preImportFileName(now: Date = new Date()): string {
   const time = `${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`;
   return `vellum-pre-import-${date}-${time}.json`;
 }
+
+const SAFETY_NAME = /^vellum-pre-import-\d{8}-\d{6}\.json$/;
+
+/**
+ * From a folder listing, the automatic pre-import copies that fall outside the
+ * newest `keep` (always at least 1). Names sort chronologically. Other files are never listed.
+ */
+export function backupsToDelete(names: string[], keep: number): string[] {
+  const safety = names.filter((n) => SAFETY_NAME.test(n)).sort();
+  const extra = safety.length - Math.max(1, keep);
+  return extra > 0 ? safety.slice(0, extra) : [];
+}
