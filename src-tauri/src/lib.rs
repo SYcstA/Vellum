@@ -10,6 +10,9 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 struct ToggleMenuItem(Mutex<MenuItem<Wry>>);
 struct GhostMenuItem(Mutex<MenuItem<Wry>>);
 struct GhostState(Mutex<bool>);
+/// True when this process was started by the Windows scheduled task (`--reminder`):
+/// it should stay hidden, show the deadline toast and exit.
+struct ReminderLaunch(bool);
 /// The currently-registered Ghost-Mode hotkey (user-customizable). The global
 /// shortcut handler compares incoming presses against this so a rebind takes
 /// effect without touching the handler.
@@ -28,7 +31,13 @@ pub fn run() {
     // Release builds only: a dev build shares the installed app's identifier,
     // so with this plugin `tauri dev` would just focus the installed app.
     #[cfg(not(debug_assertions))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        // The scheduled reminder fired while Vellum is already running: just
+        // ask the dashboard to run its reminder check; don't steal focus.
+        if args.iter().any(|a| a == "--reminder") {
+            let _ = app.emit("reminder-check", ());
+            return;
+        }
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.unminimize();
             let _ = window.show();
@@ -102,6 +111,7 @@ pub fn run() {
             app.manage(ToggleMenuItem(Mutex::new(toggle_item.clone())));
             app.manage(GhostMenuItem(Mutex::new(ghost_item.clone())));
             app.manage(GhostState(Mutex::new(false)));
+            app.manage(ReminderLaunch(std::env::args().any(|a| a == "--reminder")));
             app.manage(GhostShortcut(Mutex::new(Some(ghost_default.clone()))));
 
             // Clear any zombie registrations from hot-reloads, then register the
@@ -183,7 +193,9 @@ pub fn run() {
             update_tray_text,
             kill_app,
             set_ghost_mode,
-            set_ghost_shortcut
+            set_ghost_shortcut,
+            launched_for_reminder,
+            set_reminder_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -272,4 +284,91 @@ fn set_ghost_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), 
         }
     }
     Ok(())
+}
+
+/// Did the Windows scheduled task start this process (so it should stay hidden)?
+#[tauri::command]
+fn launched_for_reminder(app: tauri::AppHandle) -> bool {
+    app.try_state::<ReminderLaunch>().map(|r| r.0).unwrap_or(false)
+}
+
+const REMINDER_TASK: &str = "Vellum Daily Reminder";
+
+/// "HH:mm" with a valid 24-hour clock value; guards everything written into the task XML.
+fn valid_hhmm(t: &str) -> bool {
+    let b = t.as_bytes();
+    t.is_ascii()
+        && b.len() == 5
+        && b[2] == b':'
+        && t[..2].parse::<u8>().map_or(false, |h| h < 24)
+        && t[3..].parse::<u8>().map_or(false, |m| m < 60)
+}
+
+/// Create/replace (enabled) or delete (disabled) a per-user Windows scheduled
+/// task that starts Vellum with `--reminder` every day at `time`, so the toast
+/// appears even after the app was quit. Runs on battery and catches up if the PC
+/// was off at that time. Installed (release) builds only: a dev exe path would
+/// be wrong.
+#[tauri::command]
+fn set_reminder_task(enabled: bool, time: String) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        return Err("Only available in the installed app.".into());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (enabled, time);
+        return Err("Only available on Windows.".into());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let run = |args: &[&str]| {
+            std::process::Command::new("schtasks")
+                .args(args)
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|e| format!("could not run schtasks: {e}"))
+        };
+
+        if !enabled {
+            // Deleting a task that does not exist is fine.
+            let _ = run(&["/Delete", "/TN", REMINDER_TASK, "/F"])?;
+            return Ok(());
+        }
+        if !valid_hhmm(&time) {
+            return Err(format!("invalid time '{time}'"));
+        }
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = exe
+            .to_string_lossy()
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        let xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><CalendarTrigger><StartBoundary>2026-01-01T{time}:00</StartBoundary><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger></Triggers>
+  <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT5M</ExecutionTimeLimit></Settings>
+  <Actions Context="Author"><Exec><Command>{exe}</Command><Arguments>--reminder</Arguments></Exec></Actions>
+</Task>"#
+        );
+        // schtasks wants UTF-16 LE with a BOM.
+        let mut bytes: Vec<u8> = vec![0xFF, 0xFE];
+        for u in xml.encode_utf16() {
+            bytes.extend_from_slice(&u.to_le_bytes());
+        }
+        let path = std::env::temp_dir().join("vellum-reminder-task.xml");
+        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        let path_s = path.to_string_lossy().to_string();
+        let out = run(&["/Create", "/TN", REMINDER_TASK, "/XML", &path_s, "/F"]);
+        let _ = std::fs::remove_file(&path);
+        let out = out?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
+    }
 }

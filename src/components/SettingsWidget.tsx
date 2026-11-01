@@ -77,6 +77,26 @@ function ShortcutRow({ label, hint, value, defaultValue, apply, isLight }: {
   );
 }
 
+/** Hour + minute pickers. A native <input type="time"> follows the Windows locale (12 h); this is always 24 h. */
+function TimeSelect24({ value, disabled, onChange, isLight }: {
+  value: string; disabled: boolean; onChange: (hhmm: string) => void; isLight: boolean;
+}) {
+  const [h, m] = value.split(":");
+  const cls = `text-xs font-mono px-1.5 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-white/5 text-white/70 border-white/10"}`;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return (
+    <div className="flex items-center gap-1" title="Reminder time (24-hour)">
+      <select value={h} disabled={disabled} onChange={(e) => onChange(`${e.target.value}:${m}`)} className={cls} aria-label="Hour">
+        {Array.from({ length: 24 }, (_, i) => <option key={i} value={two(i)}>{two(i)}</option>)}
+      </select>
+      <span className={isLight ? "text-gray-500" : "text-white/40"}>:</span>
+      <select value={m} disabled={disabled} onChange={(e) => onChange(`${h}:${e.target.value}`)} className={cls} aria-label="Minute">
+        {Array.from({ length: 60 }, (_, i) => <option key={i} value={two(i)}>{two(i)}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function SettingsWidget() {
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const resetAllData = useAppStore((s) => s.resetAllData);
@@ -111,6 +131,8 @@ function SettingsWidget() {
   const remindersEnabled = useAppStore((s) => s.remindersEnabled);
   const setRemindersEnabled = useAppStore((s) => s.setRemindersEnabled);
   const reminderTime = useAppStore((s) => s.reminderTime);
+  const reminderWhenClosed = useAppStore((s) => s.reminderWhenClosed);
+  const setReminderWhenClosed = useAppStore((s) => s.setReminderWhenClosed);
   const setReminderTime = useAppStore((s) => s.setReminderTime);
   const [reminderError, setReminderError] = useState("");
   const loadData = useAppStore((s) => s.loadData);
@@ -153,6 +175,16 @@ function SettingsWidget() {
       // Resync on failure too.
       try { setAutoStartEnabled(await isEnabled()); }
       catch (resyncErr) { console.error("Autostart resync failed:", resyncErr); }
+    }
+  };
+
+  const handleToggleWhenClosed = async () => {
+    try {
+      await invoke("set_reminder_task", { enabled: !reminderWhenClosed, time: reminderTime });
+      setReminderWhenClosed(!reminderWhenClosed);
+      setReminderError("");
+    } catch (err) {
+      setReminderError(String(err));
     }
   };
 
@@ -310,11 +342,16 @@ function SettingsWidget() {
                 <button onClick={handleToggleReminders} className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${remindersEnabled ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30" : `${isLight ? "bg-gray-100 text-gray-600 border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:border-white/30"}`}`}>
                   {remindersEnabled && <Check size={13} strokeWidth={2.5} />}Daily summary
                 </button>
-                <input type="time" value={reminderTime} disabled={!remindersEnabled}
-                  onChange={(e) => e.target.value && setReminderTime(e.target.value)}
-                  className={`text-xs font-mono px-2 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-white/5 text-white/70 border-white/10"}`} title="Reminder time" />
+                <TimeSelect24 value={reminderTime} disabled={!remindersEnabled} onChange={setReminderTime} isLight={isLight} />
               </div>
-              <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>One toast a day for tasks due or past due, while Vellum is running.</p>
+              {remindersEnabled && (
+                <button onClick={handleToggleWhenClosed} className={`mt-1.5 w-full flex items-center justify-center gap-1.5 text-xs font-medium transition-colors px-3 py-1.5 rounded-lg border ${reminderWhenClosed ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30" : `${isLight ? "bg-gray-100 text-gray-600 border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:border-white/30"}`}`}>
+                  {reminderWhenClosed && <Check size={13} strokeWidth={2.5} />}Also remind when Vellum is closed
+                </button>
+              )}
+              <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>
+                One toast a day for tasks due or past due (24-hour clock). {reminderWhenClosed ? "A Windows scheduled task wakes Vellum in the background at that time, even after Quit." : "Works while Vellum is running (the tray counts)."}
+              </p>
               {reminderError && <p className="text-[10px] text-red-400 mt-1">{reminderError}</p>}
             </div>
             {/* Backup */}

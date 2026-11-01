@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocalToday } from "../utils/date";
 import { createPortal } from "react-dom";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
@@ -75,14 +76,16 @@ function DatePicker({ value, onChange }: DatePickerProps) {
   // Year range centered on the viewed year so any year stays reachable.
   const yearOptions = Array.from({ length: 21 }, (_, i) => year - 10 + i);
 
+  const todayStr = useLocalToday();
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(<div key={`e-${i}`} />);
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     const isSel = dateStr === value;
+    const isToday = dateStr === todayStr;
     cells.push(
-      <button key={d} onClick={() => handleSelect(d)}
-        className={`text-xs rounded-lg py-1 transition-colors ${isSel ? "bg-indigo-500/40 text-indigo-200" : `${txtBody} hover:bg-white/10`}`}>
+      <button key={d} onClick={() => handleSelect(d)} title={isToday ? "Today" : undefined}
+        className={`text-xs rounded-lg py-1 transition-colors ${isToday ? "ring-1 ring-indigo-400/80 font-semibold" : ""} ${isSel ? "bg-indigo-500/40 text-indigo-200" : `${txtBody} hover:bg-white/10`}`}>
         {d}
       </button>
     );

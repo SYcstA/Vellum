@@ -80,6 +80,8 @@ function App() {
   // the persisted POSITION+SIZE, so no resizing here.
   useEffect(() => {
     const initApp = async () => {
+      // Started by the scheduled reminder task: stay hidden, the hook shows the toast.
+      try { if (await invoke<boolean>("launched_for_reminder")) return; } catch { /* not in Tauri */ }
       const appWindow = getCurrentWindow();
       const isFirstOpen = !localStorage.getItem("vellum_first_open");
 

@@ -97,9 +97,12 @@ interface AppState {
   noteNewKey: string;
   noteSearchKey: string;
   remindersEnabled: boolean;
+  /** Also remind (via a Windows scheduled task) when Vellum has been quit. */
+  reminderWhenClosed: boolean;
   /** Local "HH:mm" at which the daily deadline summary is shown. */
   reminderTime: string;
   setRemindersEnabled: (on: boolean) => void;
+  setReminderWhenClosed: (on: boolean) => void;
   setReminderTime: (time: string) => void;
 
   /* Non-persisted data */
@@ -280,6 +283,7 @@ export const useAppStore = create<AppState>()(
       noteNewKey: DEFAULT_NOTE_NEW_KEY,
       noteSearchKey: DEFAULT_NOTE_SEARCH_KEY,
       remindersEnabled: false,
+      reminderWhenClosed: false,
       reminderTime: "09:00",
       widgetPositions: {
         todo: { x: 50, y: 50, width: 420, height: 400 },
@@ -299,6 +303,7 @@ export const useAppStore = create<AppState>()(
       setNoteNewKey: (accelerator) => set({ noteNewKey: accelerator }),
       setNoteSearchKey: (accelerator) => set({ noteSearchKey: accelerator }),
       setRemindersEnabled: (on) => set({ remindersEnabled: on }),
+      setReminderWhenClosed: (on) => set({ reminderWhenClosed: on }),
       setReminderTime: (time) => set({ reminderTime: time }),
       setHighlightedNoteId: (noteId) => set({ highlightedNoteId: noteId, noteSelectionEpoch: Date.now() }),
 
@@ -665,6 +670,7 @@ export const useAppStore = create<AppState>()(
         noteNewKey: state.noteNewKey,
         noteSearchKey: state.noteSearchKey,
         remindersEnabled: state.remindersEnabled,
+        reminderWhenClosed: state.reminderWhenClosed,
         reminderTime: state.reminderTime,
       }),
     }
