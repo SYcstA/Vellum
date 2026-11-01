@@ -1,9 +1,5 @@
 /** Default Ghost-Mode hotkey; must match the default registered in lib.rs. */
 export const DEFAULT_GHOST_SHORTCUT = "Control+Alt+G";
-/** Quick-Capture has no default hotkey (empty = off); open it from the tray or Settings. */
-export const DEFAULT_CAPTURE_SHORTCUT = "";
-/** Short-lived default from earlier v0.3 dev builds; cleared on boot. */
-export const LEGACY_CAPTURE_SHORTCUT = "Control+Alt+N";
 /** In-app Notes hotkeys (matched by utils/hotkeys.ts, not registered with the OS). */
 export const DEFAULT_NOTE_NEW_KEY = "Control+N";
 export const DEFAULT_NOTE_SEARCH_KEY = "Control+F";

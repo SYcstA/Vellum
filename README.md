@@ -43,11 +43,8 @@ Built on **Tauri 2** (a native Rust shell + a React/TypeScript frontend), Vellum
 ### Backup & Restore
 **Settings → Backup** exports everything (tasks, notes, tags, links, activity log) to a single `.json` file and imports it back. Importing validates the whole file first, shows what it contains, saves a safety copy of your current data to `%APPDATA%\com.osvaldo.vellum\backups\`, and only then replaces your data.
 
-### Quick Capture
-Open a small always-on-top box from the **tray menu** (or assign a hotkey in Settings). Type a task and press Enter (it lands in an **Inbox** tag), or start with `n:` to save a note instead. The dashboard updates live.
-
 ### All Shortcuts in One Place
-**Settings → Shortcuts** lists every hotkey with where it works (Ghost Mode, Quick Capture, New note, Search notes). Click a key box and press a new combo to change it; Reset restores the default and Clear turns an optional one off.
+**Settings → Shortcuts** lists every hotkey with where it works (Ghost Mode, New note, Search notes). Click a key box and press a new combo to change it; Reset restores the default.
 
 ### Deadline Reminder
 Turn on **Settings → Deadline Reminder** for one daily notification listing tasks due today or past due, at a time you choose, or when you open Vellum later in the day. Works while Vellum is running (pair it with *Launch on System Startup*).

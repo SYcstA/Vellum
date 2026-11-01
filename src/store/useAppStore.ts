@@ -33,7 +33,7 @@ import {
   getDb,
 } from "./db";
 import { stripHtml } from "../utils/notes";
-import { DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT, DEFAULT_NOTE_NEW_KEY, DEFAULT_NOTE_SEARCH_KEY } from "../utils/shortcut";
+import { DEFAULT_GHOST_SHORTCUT, DEFAULT_NOTE_NEW_KEY, DEFAULT_NOTE_SEARCH_KEY } from "../utils/shortcut";
 
 export type Task = {
   id: string;
@@ -93,8 +93,6 @@ interface AppState {
   widgetOpacity: number;
   wallpaperPath: string | null;
   ghostShortcut: string;
-  /** Global hotkey; "" = off. */
-  captureShortcut: string;
   /** In-app Notes hotkeys, "Control+N" style (see utils/hotkeys.ts). */
   noteNewKey: string;
   noteSearchKey: string;
@@ -130,7 +128,6 @@ interface AppState {
   setWidgetOpacity: (opacity: number) => void;
   setWallpaperPath: (path: string | null) => void;
   setGhostShortcut: (accelerator: string) => void;
-  setCaptureShortcut: (accelerator: string) => void;
   setNoteNewKey: (accelerator: string) => void;
   setNoteSearchKey: (accelerator: string) => void;
   refreshLogs: () => Promise<void>;
@@ -279,7 +276,6 @@ export const useAppStore = create<AppState>()(
       widgetOpacity: 1.0,
       wallpaperPath: null,
       ghostShortcut: DEFAULT_GHOST_SHORTCUT,
-      captureShortcut: DEFAULT_CAPTURE_SHORTCUT,
       noteNewKey: DEFAULT_NOTE_NEW_KEY,
       noteSearchKey: DEFAULT_NOTE_SEARCH_KEY,
       remindersEnabled: false,
@@ -299,7 +295,6 @@ export const useAppStore = create<AppState>()(
       setWidgetOpacity: (opacity) => set({ widgetOpacity: opacity }),
       setWallpaperPath: (path) => set({ wallpaperPath: path }),
       setGhostShortcut: (accelerator) => set({ ghostShortcut: accelerator }),
-      setCaptureShortcut: (accelerator) => set({ captureShortcut: accelerator }),
       setNoteNewKey: (accelerator) => set({ noteNewKey: accelerator }),
       setNoteSearchKey: (accelerator) => set({ noteSearchKey: accelerator }),
       setRemindersEnabled: (on) => set({ remindersEnabled: on }),
@@ -659,7 +654,6 @@ export const useAppStore = create<AppState>()(
         widgetOpacity: state.widgetOpacity,
         wallpaperPath: state.wallpaperPath,
         ghostShortcut: state.ghostShortcut,
-        captureShortcut: state.captureShortcut,
         noteNewKey: state.noteNewKey,
         noteSearchKey: state.noteSearchKey,
         remindersEnabled: state.remindersEnabled,
