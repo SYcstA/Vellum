@@ -40,6 +40,7 @@
       "allow": [{ "path": "$APPDATA/backups" }, { "path": "$APPDATA/backups/**" }]
     },
     "global-shortcut:default",
+    "notification:default",
     "window-state:default"
   ]
 }

@@ -93,6 +93,11 @@ interface AppState {
   widgetOpacity: number;
   wallpaperPath: string | null;
   ghostShortcut: string;
+  remindersEnabled: boolean;
+  /** Local "HH:mm" at which the daily deadline summary is shown. */
+  reminderTime: string;
+  setRemindersEnabled: (on: boolean) => void;
+  setReminderTime: (time: string) => void;
 
   /* Non-persisted data */
   tasks: Task[];
@@ -266,6 +271,8 @@ export const useAppStore = create<AppState>()(
       widgetOpacity: 1.0,
       wallpaperPath: null,
       ghostShortcut: DEFAULT_GHOST_SHORTCUT,
+      remindersEnabled: false,
+      reminderTime: "09:00",
       widgetPositions: {
         todo: { x: 50, y: 50, width: 420, height: 400 },
         calendar: { x: 500, y: 50, width: 360, height: 390 },
@@ -281,6 +288,8 @@ export const useAppStore = create<AppState>()(
       setWidgetOpacity: (opacity) => set({ widgetOpacity: opacity }),
       setWallpaperPath: (path) => set({ wallpaperPath: path }),
       setGhostShortcut: (accelerator) => set({ ghostShortcut: accelerator }),
+      setRemindersEnabled: (on) => set({ remindersEnabled: on }),
+      setReminderTime: (time) => set({ reminderTime: time }),
       setHighlightedNoteId: (noteId) => set({ highlightedNoteId: noteId, noteSelectionEpoch: Date.now() }),
 
       /* ─── NON-PERSISTED STATE ─── */
@@ -636,6 +645,8 @@ export const useAppStore = create<AppState>()(
         widgetOpacity: state.widgetOpacity,
         wallpaperPath: state.wallpaperPath,
         ghostShortcut: state.ghostShortcut,
+        remindersEnabled: state.remindersEnabled,
+        reminderTime: state.reminderTime,
       }),
     }
   )

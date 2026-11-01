@@ -3,6 +3,7 @@ import { Rnd } from "react-rnd";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
@@ -27,6 +28,11 @@ function SettingsWidget() {
   const setGhostShortcut = useAppStore((s) => s.setGhostShortcut);
   useWidgetBoundaryClamp("settings", widgetPos, setWidgetPos);
 
+  const remindersEnabled = useAppStore((s) => s.remindersEnabled);
+  const setRemindersEnabled = useAppStore((s) => s.setRemindersEnabled);
+  const reminderTime = useAppStore((s) => s.reminderTime);
+  const setReminderTime = useAppStore((s) => s.setReminderTime);
+  const [reminderError, setReminderError] = useState("");
   const loadData = useAppStore((s) => s.loadData);
   const refreshLogs = useAppStore((s) => s.refreshLogs);
   const [pendingImport, setPendingImport] = useState<BackupV1 | null>(null);
@@ -95,6 +101,18 @@ function SettingsWidget() {
       // Resync on failure too.
       try { setAutoStartEnabled(await isEnabled()); }
       catch (resyncErr) { console.error("Autostart resync failed:", resyncErr); }
+    }
+  };
+
+  const handleToggleReminders = async () => {
+    if (remindersEnabled) { setRemindersEnabled(false); return; }
+    try {
+      const ok = (await isPermissionGranted()) || (await requestPermission()) === "granted";
+      if (!ok) { setReminderError("Notifications are blocked. Allow them for Vellum in Windows Settings."); return; }
+      setReminderError("");
+      setRemindersEnabled(true);
+    } catch (err) {
+      setReminderError(String(err));
     }
   };
 
@@ -242,6 +260,20 @@ function SettingsWidget() {
                 {capturingShortcut ? "Esc to cancel." : "Click, then press the new combo."}
               </p>
               {shortcutError && <p className="text-[10px] text-red-400 mt-1">{shortcutError}</p>}
+            </div>
+            {/* Deadline reminders */}
+            <div>
+              <p className={`text-xs ${textSecondary} mb-2`}>Deadline Reminder</p>
+              <div className="flex gap-1.5">
+                <button onClick={handleToggleReminders} className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${remindersEnabled ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30" : `${isLight ? "bg-gray-100 text-gray-600 border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:border-white/30"}`}`}>
+                  {remindersEnabled && <Check size={13} strokeWidth={2.5} />}Daily summary
+                </button>
+                <input type="time" value={reminderTime} disabled={!remindersEnabled}
+                  onChange={(e) => e.target.value && setReminderTime(e.target.value)}
+                  className={`text-xs font-mono px-2 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-white/5 text-white/70 border-white/10"}`} title="Reminder time" />
+              </div>
+              <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>One toast a day for tasks due or past due, while Vellum is running.</p>
+              {reminderError && <p className="text-[10px] text-red-400 mt-1">{reminderError}</p>}
             </div>
             {/* Backup */}
             <div>

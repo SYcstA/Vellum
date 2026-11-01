@@ -15,10 +15,12 @@ import { useWindowBoundaryGuard } from "./utils/window";
 import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT } from "./utils/shortcut";
 import { initSchema, markSeeded } from "./store/db";
 import { useAppHotkeys } from "./utils/hotkeys";
+import { useDeadlineReminders } from "./utils/useDeadlineReminders";
 import "./App.css";
 
 function App() {
   useWindowBoundaryGuard();
+  useDeadlineReminders();
   const requestNoteAction = useAppStore((s) => s.requestNoteAction);
   useAppHotkeys({
     "Ctrl+N": () => requestNoteAction("new"),
