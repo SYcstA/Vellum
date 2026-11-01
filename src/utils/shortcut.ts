@@ -1,5 +1,7 @@
 /** Default Ghost-Mode hotkey; must match the default registered in lib.rs. */
 export const DEFAULT_GHOST_SHORTCUT = "Control+Alt+G";
+/** Default Quick-Capture hotkey; must match the default registered in lib.rs. */
+export const DEFAULT_CAPTURE_SHORTCUT = "Control+Alt+N";
 /** Pre-0.3 default, auto-migrated to the new default on boot. */
 export const LEGACY_GHOST_SHORTCUT = "Alt+G";
 

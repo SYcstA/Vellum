@@ -12,8 +12,9 @@ import WindowControls from "./components/WindowControls";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "./store/useAppStore";
 import { useWindowBoundaryGuard } from "./utils/window";
-import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT } from "./utils/shortcut";
+import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT } from "./utils/shortcut";
 import { initSchema, markSeeded } from "./store/db";
+import { listen } from "@tauri-apps/api/event";
 import { useAppHotkeys } from "./utils/hotkeys";
 import { useDeadlineReminders } from "./utils/useDeadlineReminders";
 import "./App.css";
@@ -21,6 +22,7 @@ import "./App.css";
 function App() {
   useWindowBoundaryGuard();
   useDeadlineReminders();
+  const refreshLogs = useAppStore((s) => s.refreshLogs);
   const requestNoteAction = useAppStore((s) => s.requestNoteAction);
   useAppHotkeys({
     "Ctrl+N": () => requestNoteAction("new"),
@@ -47,6 +49,12 @@ function App() {
     document.documentElement.dataset.theme = widgetThemeColor === "light" ? "light" : "dark";
   }, [widgetThemeColor]);
 
+  // The quick-capture window writes to the same SQLite file; reload when it says so.
+  useEffect(() => {
+    const unlisten = listen("data-changed", () => { void loadData().then(refreshLogs); });
+    return () => { void unlisten.then((un) => un()); };
+  }, [loadData, refreshLogs]);
+
   useEffect(() => {
     async function boot() {
       try {
@@ -67,6 +75,12 @@ function App() {
       if (saved && saved !== DEFAULT_GHOST_SHORTCUT) {
         try { await invoke("set_ghost_shortcut", { accelerator: saved }); }
         catch (err) { console.error("Re-apply ghost shortcut failed:", err); }
+      }
+      // Same for the Quick-Capture hotkey.
+      const savedCapture = useAppStore.getState().captureShortcut;
+      if (savedCapture && savedCapture !== DEFAULT_CAPTURE_SHORTCUT) {
+        try { await invoke("set_capture_shortcut", { accelerator: savedCapture }); }
+        catch (err) { console.error("Re-apply capture shortcut failed:", err); }
       }
     }
     boot();

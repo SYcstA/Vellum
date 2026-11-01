@@ -11,7 +11,64 @@ import { X, Check, Trash2 } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
 import { exportBackup, pickBackup, applyBackup } from "../store/backupIO";
 import type { BackupV1 } from "../store/backup";
-import { acceleratorFromEvent, prettyShortcut, DEFAULT_GHOST_SHORTCUT } from "../utils/shortcut";
+import { acceleratorFromEvent, prettyShortcut, DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT } from "../utils/shortcut";
+
+/** One click-to-rebind global hotkey row; `command` is the Rust command that re-registers it. */
+function ShortcutRow({ label, value, defaultValue, command, onSaved, isLight, textSecondary }: {
+  label: string; value: string; defaultValue: string; command: string;
+  onSaved: (acc: string) => void; isLight: boolean; textSecondary: string;
+}) {
+  const [capturing, setCapturing] = useState(false);
+  const [error, setError] = useState("");
+  const [preview, setPreview] = useState("");
+
+  const apply = async (acc: string) => {
+    try {
+      await invoke(command, { accelerator: acc });
+      onSaved(acc);
+      setError("");
+      setCapturing(false);
+      setPreview("");
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  // Esc cancels; otherwise build the accelerator from the pressed combo and show
+  // the held modifiers live so the user sees what is being captured.
+  const capture = async (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    if (e.key === "Escape") { setCapturing(false); setPreview(""); setError(""); return; }
+    const r = acceleratorFromEvent(e.nativeEvent);
+    setPreview(r.preview);
+    if (r.error) { setError(r.error); return; }
+    if (r.acc) await apply(r.acc);
+  };
+
+  return (
+    <div>
+      <p className={`text-xs ${textSecondary} mb-2`}>{label}</p>
+      <div className="flex gap-1.5">
+        <button
+          onKeyDown={capturing ? capture : undefined}
+          onClick={() => { setCapturing(true); setError(""); setPreview(""); }}
+          onBlur={() => { setCapturing(false); setPreview(""); }}
+          className={`flex-1 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${capturing ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
+        >
+          <span className="font-mono">{capturing ? (preview || "Press your combo…") : prettyShortcut(value)}</span>
+        </button>
+        {value !== defaultValue && !capturing && (
+          <button onClick={() => apply(defaultValue)} title={`Reset to ${prettyShortcut(defaultValue)}`}
+            className={`text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${isLight ? "bg-gray-100 text-gray-500 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/50 border-white/10 hover:text-white/90 hover:border-white/30"}`}>Reset</button>
+        )}
+      </div>
+      <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>
+        {capturing ? "Esc to cancel." : "Click, then press the new combo."}
+      </p>
+      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
+    </div>
+  );
+}
 
 function SettingsWidget() {
   const toggleSettings = useAppStore((s) => s.toggleSettings);
@@ -26,6 +83,8 @@ function SettingsWidget() {
   const setWallpaperPath = useAppStore((s) => s.setWallpaperPath);
   const ghostShortcut = useAppStore((s) => s.ghostShortcut);
   const setGhostShortcut = useAppStore((s) => s.setGhostShortcut);
+  const captureShortcut = useAppStore((s) => s.captureShortcut);
+  const setCaptureShortcut = useAppStore((s) => s.setCaptureShortcut);
   useWidgetBoundaryClamp("settings", widgetPos, setWidgetPos);
 
   const remindersEnabled = useAppStore((s) => s.remindersEnabled);
@@ -40,34 +99,6 @@ function SettingsWidget() {
   const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [autoStartEnabled, setAutoStartEnabled] = useState(false);
-  const [capturingShortcut, setCapturingShortcut] = useState(false);
-  const [shortcutError, setShortcutError] = useState("");
-
-  const [shortcutPreview, setShortcutPreview] = useState("");
-
-  const applyShortcut = async (acc: string) => {
-    try {
-      await invoke("set_ghost_shortcut", { accelerator: acc });
-      setGhostShortcut(acc);
-      setShortcutError("");
-      setCapturingShortcut(false);
-      setShortcutPreview("");
-    } catch (err) {
-      setShortcutError(String(err));
-    }
-  };
-
-  // Esc cancels; otherwise build the accelerator from the pressed combo and show
-  // the held modifiers live so the user sees what is being captured.
-  const captureShortcut = async (e: React.KeyboardEvent) => {
-    e.preventDefault();
-    if (e.key === "Escape") { setCapturingShortcut(false); setShortcutPreview(""); setShortcutError(""); return; }
-    const r = acceleratorFromEvent(e.nativeEvent);
-    setShortcutPreview(r.preview);
-    if (r.error) { setShortcutError(r.error); return; }
-    if (r.acc) await applyShortcut(r.acc);
-  };
-
   const handleBrowseWallpaper = async () => {
     try {
       const selected = await open({
@@ -239,28 +270,8 @@ function SettingsWidget() {
                 {autoStartEnabled && <Check size={13} strokeWidth={2.5} />}Launch on System Startup
               </button>
             </div>
-            {/* Ghost Mode Shortcut */}
-            <div>
-              <p className={`text-xs ${textSecondary} mb-2`}>Ghost Mode Shortcut</p>
-              <div className="flex gap-1.5">
-                <button
-                  onKeyDown={capturingShortcut ? captureShortcut : undefined}
-                  onClick={() => { setCapturingShortcut(true); setShortcutError(""); setShortcutPreview(""); }}
-                  onBlur={() => { setCapturingShortcut(false); setShortcutPreview(""); }}
-                  className={`flex-1 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${capturingShortcut ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
-                >
-                  <span className="font-mono">{capturingShortcut ? (shortcutPreview || "Press your combo…") : prettyShortcut(ghostShortcut)}</span>
-                </button>
-                {ghostShortcut !== DEFAULT_GHOST_SHORTCUT && !capturingShortcut && (
-                  <button onClick={() => applyShortcut(DEFAULT_GHOST_SHORTCUT)} title={`Reset to ${prettyShortcut(DEFAULT_GHOST_SHORTCUT)}`}
-                    className={`text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${isLight ? "bg-gray-100 text-gray-500 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/50 border-white/10 hover:text-white/90 hover:border-white/30"}`}>Reset</button>
-                )}
-              </div>
-              <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>
-                {capturingShortcut ? "Esc to cancel." : "Click, then press the new combo."}
-              </p>
-              {shortcutError && <p className="text-[10px] text-red-400 mt-1">{shortcutError}</p>}
-            </div>
+            <ShortcutRow label="Ghost Mode Shortcut" value={ghostShortcut} defaultValue={DEFAULT_GHOST_SHORTCUT} command="set_ghost_shortcut" onSaved={setGhostShortcut} isLight={isLight} textSecondary={textSecondary} />
+            <ShortcutRow label="Quick Capture Shortcut" value={captureShortcut} defaultValue={DEFAULT_CAPTURE_SHORTCUT} command="set_capture_shortcut" onSaved={setCaptureShortcut} isLight={isLight} textSecondary={textSecondary} />
             {/* Deadline reminders */}
             <div>
               <p className={`text-xs ${textSecondary} mb-2`}>Deadline Reminder</p>

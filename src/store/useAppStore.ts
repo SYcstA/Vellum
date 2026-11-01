@@ -33,7 +33,7 @@ import {
   getDb,
 } from "./db";
 import { stripHtml } from "../utils/notes";
-import { DEFAULT_GHOST_SHORTCUT } from "../utils/shortcut";
+import { DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT } from "../utils/shortcut";
 
 export type Task = {
   id: string;
@@ -93,6 +93,7 @@ interface AppState {
   widgetOpacity: number;
   wallpaperPath: string | null;
   ghostShortcut: string;
+  captureShortcut: string;
   remindersEnabled: boolean;
   /** Local "HH:mm" at which the daily deadline summary is shown. */
   reminderTime: string;
@@ -125,6 +126,7 @@ interface AppState {
   setWidgetOpacity: (opacity: number) => void;
   setWallpaperPath: (path: string | null) => void;
   setGhostShortcut: (accelerator: string) => void;
+  setCaptureShortcut: (accelerator: string) => void;
   refreshLogs: () => Promise<void>;
   refreshTags: () => Promise<void>;
   setActiveCategoryFilter: (filter: string) => void;
@@ -271,6 +273,7 @@ export const useAppStore = create<AppState>()(
       widgetOpacity: 1.0,
       wallpaperPath: null,
       ghostShortcut: DEFAULT_GHOST_SHORTCUT,
+      captureShortcut: DEFAULT_CAPTURE_SHORTCUT,
       remindersEnabled: false,
       reminderTime: "09:00",
       widgetPositions: {
@@ -288,6 +291,7 @@ export const useAppStore = create<AppState>()(
       setWidgetOpacity: (opacity) => set({ widgetOpacity: opacity }),
       setWallpaperPath: (path) => set({ wallpaperPath: path }),
       setGhostShortcut: (accelerator) => set({ ghostShortcut: accelerator }),
+      setCaptureShortcut: (accelerator) => set({ captureShortcut: accelerator }),
       setRemindersEnabled: (on) => set({ remindersEnabled: on }),
       setReminderTime: (time) => set({ reminderTime: time }),
       setHighlightedNoteId: (noteId) => set({ highlightedNoteId: noteId, noteSelectionEpoch: Date.now() }),
@@ -645,6 +649,7 @@ export const useAppStore = create<AppState>()(
         widgetOpacity: state.widgetOpacity,
         wallpaperPath: state.wallpaperPath,
         ghostShortcut: state.ghostShortcut,
+        captureShortcut: state.captureShortcut,
         remindersEnabled: state.remindersEnabled,
         reminderTime: state.reminderTime,
       }),
