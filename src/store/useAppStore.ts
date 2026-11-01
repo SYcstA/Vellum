@@ -73,7 +73,7 @@ interface AppState {
   toggleSettings: () => void;
 
   openNotesWithHighlight: (noteId: string) => void;
-  /** One-shot request from an app hotkey; NotesWidget consumes it (opens the widget first). */
+  /** One-shot request from an app hotkey; NotesWidget consumes it. Ignored while Notes is closed. */
   pendingNoteAction: "new" | "search" | null;
   requestNoteAction: (action: "new" | "search") => void;
   clearNoteAction: () => void;
@@ -306,7 +306,7 @@ export const useAppStore = create<AppState>()(
       highlightedNoteId: null,
       noteSelectionEpoch: 0,
       pendingNoteAction: null,
-      requestNoteAction: (action) => set({ isNotesOpen: true, pendingNoteAction: action }),
+      requestNoteAction: (action) => set((s) => (s.isNotesOpen ? { pendingNoteAction: action } : {})),
       clearNoteAction: () => set({ pendingNoteAction: null }),
 
       toggleToDo: () => set((s) => ({ isToDoOpen: !s.isToDoOpen })),

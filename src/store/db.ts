@@ -2,6 +2,7 @@ import Database from "@tauri-apps/plugin-sql";
 import type { Task, Note, LogEntry } from "./useAppStore";
 import type { BackupTables } from "./backup";
 import { dbUrl } from "./dbName";
+import { lateItemLabel } from "../utils/taskTiming";
 
 let db: Database | null = null;
 
@@ -236,11 +237,12 @@ export async function fetchTaskTitlesByDate(
       : type === "late"
       ? "AND Deadline_Date IS NOT NULL AND Completion_Date > Deadline_Date"
       : "AND (Deadline_Date IS NULL OR Completion_Date <= Deadline_Date)";
-  const rows = await d.select<{ Title: string }[]>(
-    `SELECT Title FROM Tasks WHERE ${column} = ?1 ${extra}`,
+  const rows = await d.select<{ Title: string; Deadline_Date: string | null }[]>(
+    `SELECT Title, Deadline_Date FROM Tasks WHERE ${column} = ?1 ${extra}`,
     [date]
   );
-  return rows.map((r) => r.Title);
+  // A late task also tells when it should have been finished.
+  return rows.map((r) => (type === "late" && r.Deadline_Date ? lateItemLabel(r.Title, r.Deadline_Date) : r.Title));
 }
 
 /** Get all unique category names (tags) */

@@ -298,8 +298,8 @@ function SettingsWidget() {
               <p className={`text-xs ${textSecondary} mb-2`}>Shortcuts</p>
               <div className="space-y-2.5">
                 <ShortcutRow label="Ghost Mode" hint="Anywhere · click-through on/off" value={ghostShortcut} defaultValue={DEFAULT_GHOST_SHORTCUT} apply={applyGhost} isLight={isLight} />
-                <ShortcutRow label="New note" hint="Notes · inside Vellum" value={noteNewKey} defaultValue={DEFAULT_NOTE_NEW_KEY} apply={(acc) => applyNoteKey(acc, noteSearchKey, setNoteNewKey, "Search notes")} isLight={isLight} />
-                <ShortcutRow label="Search notes" hint="Notes · inside Vellum" value={noteSearchKey} defaultValue={DEFAULT_NOTE_SEARCH_KEY} apply={(acc) => applyNoteKey(acc, noteNewKey, setNoteSearchKey, "New note")} isLight={isLight} />
+                <ShortcutRow label="New note" hint="While Notes is open" value={noteNewKey} defaultValue={DEFAULT_NOTE_NEW_KEY} apply={(acc) => applyNoteKey(acc, noteSearchKey, setNoteNewKey, "Search notes")} isLight={isLight} />
+                <ShortcutRow label="Search notes" hint="While Notes is open" value={noteSearchKey} defaultValue={DEFAULT_NOTE_SEARCH_KEY} apply={(acc) => applyNoteKey(acc, noteNewKey, setNoteSearchKey, "New note")} isLight={isLight} />
               </div>
               <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>Click a key box, then press the new combo. Esc cancels.</p>
             </div>

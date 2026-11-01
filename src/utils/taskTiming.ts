@@ -30,3 +30,8 @@ export function lateCompletionDates(
   }
   return days;
 }
+
+/** Calendar popup line for a task finished late: title plus the day it was due. */
+export function lateItemLabel(title: string, deadlineDate: string): string {
+  return `${title} · due ${deadlineDate}`;
+}

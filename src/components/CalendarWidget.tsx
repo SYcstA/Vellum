@@ -125,7 +125,8 @@ function CalendarWidget() {
         </span>
         {(hasCompletion || hasOverdue || hasDeadline) && (
           <div className="flex items-center gap-0.5 mt-0.5 leading-none">
-            {hasCompletion && <Check size={11} strokeWidth={3} className={hasLate ? "text-orange-400" : "text-emerald-400"} aria-label={hasLate ? "Task finished late" : "Task completed"} />}
+            {hasCompletion && <Check size={11} strokeWidth={3} className="text-emerald-400" aria-label="Task completed" />}
+            {hasLate && <span className="w-1.5 h-1.5 rounded-full bg-orange-400" title="A task was finished late" />}
             {hasOverdue && <span className="w-1.5 h-1.5 rounded-full bg-red-500" title="Overdue" />}
             {hasDeadline && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Deadline" />}
           </div>
@@ -216,7 +217,7 @@ function CalendarWidget() {
             <span className="text-[10px] text-white/40">Completed</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Check size={11} strokeWidth={3} className="text-orange-400" />
+            <span className="w-2 h-2 rounded-full bg-orange-400" />
             <span className="text-[10px] text-white/40">Finished late</span>
           </div>
           <div className="flex items-center gap-1.5">

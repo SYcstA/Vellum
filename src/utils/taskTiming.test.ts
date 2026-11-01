@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lateCompletionDates, taskTiming } from "./taskTiming";
+import { lateCompletionDates, lateItemLabel, taskTiming } from "./taskTiming";
 
 const TODAY = "2026-11-01";
 
@@ -64,5 +64,11 @@ describe("lateCompletionDates", () => {
 
   it("returns an empty set when nothing was late", () => {
     expect(lateCompletionDates([{ completed: true, completionDate: "2026-11-01" }], TODAY).size).toBe(0);
+  });
+});
+
+describe("lateItemLabel", () => {
+  it("shows the title with the day it was meant to be finished", () => {
+    expect(lateItemLabel("Write report", "2026-10-30")).toBe("Write report · due 2026-10-30");
   });
 });
