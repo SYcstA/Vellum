@@ -32,3 +32,17 @@ describe("matchHotkey", () => {
     expect(matchHotkey(ev({ key: "k", altKey: true }), "Alt+K")).toBe(true);
   });
 });
+
+describe("matchHotkey with specs saved from the rebind UI", () => {
+  it("accepts 'Control' as an alias of 'Ctrl'", () => {
+    expect(matchHotkey(ev({ key: "n", ctrlKey: true }), "Control+N")).toBe(true);
+  });
+
+  it("matches Space (event key is a literal space)", () => {
+    expect(matchHotkey(ev({ key: " ", ctrlKey: true }), "Control+Space")).toBe(true);
+  });
+
+  it("matches F-keys", () => {
+    expect(matchHotkey(ev({ key: "F5", altKey: true }), "Alt+F5")).toBe(true);
+  });
+});

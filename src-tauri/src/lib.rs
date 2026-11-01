@@ -14,8 +14,8 @@ struct GhostState(Mutex<bool>);
 /// shortcut handler compares incoming presses against this so a rebind takes
 /// effect without touching the handler.
 struct GhostShortcut(Mutex<Option<Shortcut>>);
-/// The currently-registered Quick-Capture hotkey (user-customizable), same idea
-/// as GhostShortcut.
+/// The currently-registered Quick-Capture hotkey. None by default: the user opts
+/// in from Settings (or opens capture from the tray / Settings button).
 struct CaptureShortcut(Mutex<Option<Shortcut>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -24,8 +24,6 @@ pub fn run() {
     // the active combo lives in GhostShortcut state and the handler toggles
     // Ghost Mode whenever the registered combo is pressed.
     let ghost_default = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyG);
-    // Default Quick-Capture hotkey (Ctrl+Alt+N); rebind via set_capture_shortcut.
-    let capture_default = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyN);
 
     tauri::Builder::default()
         // Must be the FIRST plugin. A second launch exits immediately and hands
@@ -107,17 +105,19 @@ pub fn run() {
 
             let toggle_item: MenuItem<Wry> =
                 MenuItem::with_id(app, "toggle", initial_text, true, None::<&str>)?;
+            let capture_item: MenuItem<Wry> =
+                MenuItem::with_id(app, "capture", "Quick Capture", true, None::<&str>)?;
             let ghost_item: MenuItem<Wry> =
                 MenuItem::with_id(app, "ghost", "Enable Ghost Mode", true, None::<&str>)?;
             let quit_item: MenuItem<Wry> =
                 MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&toggle_item, &ghost_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&toggle_item, &capture_item, &ghost_item, &quit_item])?;
 
             app.manage(ToggleMenuItem(Mutex::new(toggle_item.clone())));
             app.manage(GhostMenuItem(Mutex::new(ghost_item.clone())));
             app.manage(GhostState(Mutex::new(false)));
             app.manage(GhostShortcut(Mutex::new(Some(ghost_default.clone()))));
-            app.manage(CaptureShortcut(Mutex::new(Some(capture_default.clone()))));
+            app.manage(CaptureShortcut(Mutex::new(None)));
 
             // Clear any zombie registrations from hot-reloads, then register the
             // default Ghost-Mode hotkey. The frontend re-applies the user's saved
@@ -126,9 +126,6 @@ pub fn run() {
             let _ = app.global_shortcut().unregister_all();
             if let Err(err) = app.global_shortcut().register(ghost_default) {
                 eprintln!("Ghost-Mode hotkey registration failed: {err}");
-            }
-            if let Err(err) = app.global_shortcut().register(capture_default) {
-                eprintln!("Quick-Capture hotkey registration failed: {err}");
             }
 
             let mut tray_builder = TrayIconBuilder::new()
@@ -159,6 +156,12 @@ pub fn run() {
                                             let _ = toggle.set_text("Hide Dashboard");
                                         }
                                     }
+                                }
+                                "capture" => {
+                                    let app = app.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        show_capture_window(&app);
+                                    });
                                 }
                                 "ghost" => {
                                     let current = app
@@ -206,7 +209,8 @@ pub fn run() {
             kill_app,
             set_ghost_mode,
             set_ghost_shortcut,
-            set_capture_shortcut
+            set_capture_shortcut,
+            open_capture
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -305,12 +309,29 @@ fn set_ghost_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), 
     rebind_shortcut(&app, &accelerator, &ghost.0, &capture.0)
 }
 
-/// Rebind the global Quick-Capture hotkey.
+/// Rebind the global Quick-Capture hotkey. An empty string turns it off.
 #[tauri::command]
 fn set_capture_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), String> {
     let ghost = app.state::<GhostShortcut>();
     let capture = app.state::<CaptureShortcut>();
+    if accelerator.is_empty() {
+        let old = capture.0.lock().ok().and_then(|g| g.clone());
+        if let Some(o) = old {
+            let _ = app.global_shortcut().unregister(o);
+        }
+        if let Ok(mut g) = capture.0.lock() {
+            *g = None;
+        }
+        return Ok(());
+    }
     rebind_shortcut(&app, &accelerator, &capture.0, &ghost.0)
+}
+
+/// Open the capture window without a hotkey (Settings button). Async command so
+/// the window is created off the main thread.
+#[tauri::command]
+async fn open_capture(app: tauri::AppHandle) {
+    show_capture_window(&app);
 }
 
 /// Show the small always-on-top capture window, creating it on first use.

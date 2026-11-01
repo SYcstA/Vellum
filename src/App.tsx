@@ -12,7 +12,7 @@ import WindowControls from "./components/WindowControls";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "./store/useAppStore";
 import { useWindowBoundaryGuard } from "./utils/window";
-import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT } from "./utils/shortcut";
+import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT, LEGACY_CAPTURE_SHORTCUT } from "./utils/shortcut";
 import { initSchema, markSeeded } from "./store/db";
 import { listen } from "@tauri-apps/api/event";
 import { useAppHotkeys } from "./utils/hotkeys";
@@ -24,9 +24,11 @@ function App() {
   useDeadlineReminders();
   const refreshLogs = useAppStore((s) => s.refreshLogs);
   const requestNoteAction = useAppStore((s) => s.requestNoteAction);
+  const noteNewKey = useAppStore((s) => s.noteNewKey);
+  const noteSearchKey = useAppStore((s) => s.noteSearchKey);
   useAppHotkeys({
-    "Ctrl+N": () => requestNoteAction("new"),
-    "Ctrl+F": () => requestNoteAction("search"),
+    [noteNewKey]: () => requestNoteAction("new"),
+    [noteSearchKey]: () => requestNoteAction("search"),
   });
   const isToDoOpen = useAppStore((s) => s.isToDoOpen);
   const isCalendarOpen = useAppStore((s) => s.isCalendarOpen);
@@ -77,8 +79,13 @@ function App() {
         catch (err) { console.error("Re-apply ghost shortcut failed:", err); }
       }
       // Same for the Quick-Capture hotkey.
-      const savedCapture = useAppStore.getState().captureShortcut;
-      if (savedCapture && savedCapture !== DEFAULT_CAPTURE_SHORTCUT) {
+      // The early Ctrl+Alt+N default was dropped; clear it unless re-chosen later.
+      let savedCapture = useAppStore.getState().captureShortcut;
+      if (savedCapture === LEGACY_CAPTURE_SHORTCUT) {
+        savedCapture = DEFAULT_CAPTURE_SHORTCUT;
+        useAppStore.getState().setCaptureShortcut(savedCapture);
+      }
+      if (savedCapture) {
         try { await invoke("set_capture_shortcut", { accelerator: savedCapture }); }
         catch (err) { console.error("Re-apply capture shortcut failed:", err); }
       }

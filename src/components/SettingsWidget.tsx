@@ -11,26 +11,30 @@ import { X, Check, Trash2 } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
 import { exportBackup, pickBackup, applyBackup } from "../store/backupIO";
 import type { BackupV1 } from "../store/backup";
-import { acceleratorFromEvent, prettyShortcut, DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT } from "../utils/shortcut";
+import { acceleratorFromEvent, describeShortcut, DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT, DEFAULT_NOTE_NEW_KEY, DEFAULT_NOTE_SEARCH_KEY } from "../utils/shortcut";
 
-/** One click-to-rebind global hotkey row; `command` is the Rust command that re-registers it. */
-function ShortcutRow({ label, value, defaultValue, command, onSaved, isLight, textSecondary }: {
-  label: string; value: string; defaultValue: string; command: string;
-  onSaved: (acc: string) => void; isLight: boolean; textSecondary: string;
+/**
+ * One row of the Shortcuts list: label + where it works, a click-to-rebind key
+ * box, Reset, and (for optional hotkeys) Clear. `apply` saves the new combo and
+ * throws if it can't (taken by another app, duplicate, ...); the old one then
+ * stays in force.
+ */
+function ShortcutRow({ label, hint, value, defaultValue, apply, clearable, isLight }: {
+  label: string; hint: string; value: string; defaultValue: string;
+  apply: (acc: string) => Promise<void>; clearable?: boolean; isLight: boolean;
 }) {
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState("");
 
-  const apply = async (acc: string) => {
+  const save = async (acc: string) => {
     try {
-      await invoke(command, { accelerator: acc });
-      onSaved(acc);
+      await apply(acc);
       setError("");
       setCapturing(false);
       setPreview("");
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -42,29 +46,34 @@ function ShortcutRow({ label, value, defaultValue, command, onSaved, isLight, te
     const r = acceleratorFromEvent(e.nativeEvent);
     setPreview(r.preview);
     if (r.error) { setError(r.error); return; }
-    if (r.acc) await apply(r.acc);
+    if (r.acc) await save(r.acc);
   };
 
+  const sub = isLight ? "text-gray-400" : "text-white/30";
+  const small = `text-[10px] font-medium transition-colors px-2 py-1.5 rounded-lg border ${isLight ? "bg-gray-100 text-gray-500 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/50 border-white/10 hover:text-white/90 hover:border-white/30"}`;
   return (
     <div>
-      <p className={`text-xs ${textSecondary} mb-2`}>{label}</p>
-      <div className="flex gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <div className="flex-1 min-w-0">
+          <p className={`text-xs ${isLight ? "text-gray-700" : "text-white/80"}`}>{label}</p>
+          <p className={`text-[10px] ${sub}`}>{hint}</p>
+        </div>
         <button
           onKeyDown={capturing ? capture : undefined}
           onClick={() => { setCapturing(true); setError(""); setPreview(""); }}
           onBlur={() => { setCapturing(false); setPreview(""); }}
-          className={`flex-1 text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${capturing ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
+          title="Click, then press the new combo (Esc to cancel)"
+          className={`min-w-24 text-xs font-medium transition-colors px-2 py-1.5 rounded-lg border ${capturing ? "bg-indigo-500/30 text-indigo-200 border-indigo-400/60" : `${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}`}
         >
-          <span className="font-mono">{capturing ? (preview || "Press your combo…") : prettyShortcut(value)}</span>
+          <span className="font-mono">{capturing ? (preview || "Press keys…") : describeShortcut(value)}</span>
         </button>
-        {value !== defaultValue && !capturing && (
-          <button onClick={() => apply(defaultValue)} title={`Reset to ${prettyShortcut(defaultValue)}`}
-            className={`text-xs font-medium transition-colors px-3 py-2 rounded-lg border ${isLight ? "bg-gray-100 text-gray-500 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/50 border-white/10 hover:text-white/90 hover:border-white/30"}`}>Reset</button>
+        {!capturing && value !== defaultValue && (
+          <button onClick={() => save(defaultValue)} title={`Reset to ${describeShortcut(defaultValue)}`} className={small}>Reset</button>
+        )}
+        {!capturing && clearable && value !== "" && (
+          <button onClick={() => save("")} title="Turn this shortcut off" className={small}>Clear</button>
         )}
       </div>
-      <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>
-        {capturing ? "Esc to cancel." : "Click, then press the new combo."}
-      </p>
       {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
     </div>
   );
@@ -85,6 +94,26 @@ function SettingsWidget() {
   const setGhostShortcut = useAppStore((s) => s.setGhostShortcut);
   const captureShortcut = useAppStore((s) => s.captureShortcut);
   const setCaptureShortcut = useAppStore((s) => s.setCaptureShortcut);
+  const noteNewKey = useAppStore((s) => s.noteNewKey);
+  const setNoteNewKey = useAppStore((s) => s.setNoteNewKey);
+  const noteSearchKey = useAppStore((s) => s.noteSearchKey);
+  const setNoteSearchKey = useAppStore((s) => s.setNoteSearchKey);
+
+  const applyGhost = async (acc: string) => {
+    await invoke("set_ghost_shortcut", { accelerator: acc });
+    setGhostShortcut(acc);
+  };
+  const applyCapture = async (acc: string) => {
+    await invoke("set_capture_shortcut", { accelerator: acc });
+    setCaptureShortcut(acc);
+  };
+  // In-app (Notes) keys are matched by Vellum itself, so no OS registration:
+  // just refuse the Win key (not seen by the matcher) and clashes with the sibling key.
+  const applyNoteKey = async (acc: string, other: string, save: (a: string) => void, otherLabel: string) => {
+    if (acc.includes("Super")) throw new Error("The Win key can't be used for in-app shortcuts.");
+    if (acc === other) throw new Error(`Already used by "${otherLabel}".`);
+    save(acc);
+  };
   useWidgetBoundaryClamp("settings", widgetPos, setWidgetPos);
 
   const remindersEnabled = useAppStore((s) => s.remindersEnabled);
@@ -270,8 +299,18 @@ function SettingsWidget() {
                 {autoStartEnabled && <Check size={13} strokeWidth={2.5} />}Launch on System Startup
               </button>
             </div>
-            <ShortcutRow label="Ghost Mode Shortcut" value={ghostShortcut} defaultValue={DEFAULT_GHOST_SHORTCUT} command="set_ghost_shortcut" onSaved={setGhostShortcut} isLight={isLight} textSecondary={textSecondary} />
-            <ShortcutRow label="Quick Capture Shortcut" value={captureShortcut} defaultValue={DEFAULT_CAPTURE_SHORTCUT} command="set_capture_shortcut" onSaved={setCaptureShortcut} isLight={isLight} textSecondary={textSecondary} />
+            {/* Shortcuts */}
+            <div>
+              <p className={`text-xs ${textSecondary} mb-2`}>Shortcuts</p>
+              <div className="space-y-2.5">
+                <ShortcutRow label="Ghost Mode" hint="Anywhere · click-through on/off" value={ghostShortcut} defaultValue={DEFAULT_GHOST_SHORTCUT} apply={applyGhost} isLight={isLight} />
+                <ShortcutRow label="Quick Capture" hint="Anywhere · also in the tray menu" value={captureShortcut} defaultValue={DEFAULT_CAPTURE_SHORTCUT} apply={applyCapture} clearable isLight={isLight} />
+                <ShortcutRow label="New note" hint="Notes · inside Vellum" value={noteNewKey} defaultValue={DEFAULT_NOTE_NEW_KEY} apply={(acc) => applyNoteKey(acc, noteSearchKey, setNoteNewKey, "Search notes")} isLight={isLight} />
+                <ShortcutRow label="Search notes" hint="Notes · inside Vellum" value={noteSearchKey} defaultValue={DEFAULT_NOTE_SEARCH_KEY} apply={(acc) => applyNoteKey(acc, noteNewKey, setNoteSearchKey, "New note")} isLight={isLight} />
+              </div>
+              <button onClick={() => { void invoke("open_capture"); }} className={`mt-2 w-full text-xs font-medium transition-colors px-3 py-1.5 rounded-lg border ${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}>Open Quick Capture now</button>
+              <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>Click a key box, then press the new combo. Esc cancels.</p>
+            </div>
             {/* Deadline reminders */}
             <div>
               <p className={`text-xs ${textSecondary} mb-2`}>Deadline Reminder</p>

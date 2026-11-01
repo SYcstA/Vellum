@@ -10,9 +10,10 @@ export function matchHotkey(
 ): boolean {
   const parts = spec.toLowerCase().split("+").map((p) => p.trim());
   const key = parts[parts.length - 1];
-  const mods = new Set(parts.slice(0, -1));
+  // Specs saved by the rebind UI say "Control"; hand-written ones say "Ctrl".
+  const mods = new Set(parts.slice(0, -1).map((m) => (m === "control" ? "ctrl" : m)));
   return (
-    e.key.toLowerCase() === key &&
+    (key === "space" ? e.key === " " : e.key.toLowerCase() === key) &&
     e.ctrlKey === mods.has("ctrl") &&
     e.shiftKey === mods.has("shift") &&
     e.altKey === mods.has("alt")

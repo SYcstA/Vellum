@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceleratorFromEvent, prettyShortcut } from "./shortcut";
+import { acceleratorFromEvent, describeShortcut, prettyShortcut } from "./shortcut";
 
 const ev = (over: Partial<Parameters<typeof acceleratorFromEvent>[0]>) => ({
   code: "",
@@ -34,5 +34,15 @@ describe("acceleratorFromEvent", () => {
 describe("prettyShortcut", () => {
   it("shows Control as Ctrl with spaced plus signs", () => {
     expect(prettyShortcut("Control+Alt+G")).toBe("Ctrl + Alt + G");
+  });
+});
+
+describe("describeShortcut", () => {
+  it("formats a set shortcut", () => {
+    expect(describeShortcut("Control+N")).toBe("Ctrl + N");
+  });
+
+  it("says Not set for an empty shortcut", () => {
+    expect(describeShortcut("")).toBe("Not set");
   });
 });

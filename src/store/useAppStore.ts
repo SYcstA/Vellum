@@ -33,7 +33,7 @@ import {
   getDb,
 } from "./db";
 import { stripHtml } from "../utils/notes";
-import { DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT } from "../utils/shortcut";
+import { DEFAULT_GHOST_SHORTCUT, DEFAULT_CAPTURE_SHORTCUT, DEFAULT_NOTE_NEW_KEY, DEFAULT_NOTE_SEARCH_KEY } from "../utils/shortcut";
 
 export type Task = {
   id: string;
@@ -93,7 +93,11 @@ interface AppState {
   widgetOpacity: number;
   wallpaperPath: string | null;
   ghostShortcut: string;
+  /** Global hotkey; "" = off. */
   captureShortcut: string;
+  /** In-app Notes hotkeys, "Control+N" style (see utils/hotkeys.ts). */
+  noteNewKey: string;
+  noteSearchKey: string;
   remindersEnabled: boolean;
   /** Local "HH:mm" at which the daily deadline summary is shown. */
   reminderTime: string;
@@ -127,6 +131,8 @@ interface AppState {
   setWallpaperPath: (path: string | null) => void;
   setGhostShortcut: (accelerator: string) => void;
   setCaptureShortcut: (accelerator: string) => void;
+  setNoteNewKey: (accelerator: string) => void;
+  setNoteSearchKey: (accelerator: string) => void;
   refreshLogs: () => Promise<void>;
   refreshTags: () => Promise<void>;
   setActiveCategoryFilter: (filter: string) => void;
@@ -274,6 +280,8 @@ export const useAppStore = create<AppState>()(
       wallpaperPath: null,
       ghostShortcut: DEFAULT_GHOST_SHORTCUT,
       captureShortcut: DEFAULT_CAPTURE_SHORTCUT,
+      noteNewKey: DEFAULT_NOTE_NEW_KEY,
+      noteSearchKey: DEFAULT_NOTE_SEARCH_KEY,
       remindersEnabled: false,
       reminderTime: "09:00",
       widgetPositions: {
@@ -292,6 +300,8 @@ export const useAppStore = create<AppState>()(
       setWallpaperPath: (path) => set({ wallpaperPath: path }),
       setGhostShortcut: (accelerator) => set({ ghostShortcut: accelerator }),
       setCaptureShortcut: (accelerator) => set({ captureShortcut: accelerator }),
+      setNoteNewKey: (accelerator) => set({ noteNewKey: accelerator }),
+      setNoteSearchKey: (accelerator) => set({ noteSearchKey: accelerator }),
       setRemindersEnabled: (on) => set({ remindersEnabled: on }),
       setReminderTime: (time) => set({ reminderTime: time }),
       setHighlightedNoteId: (noteId) => set({ highlightedNoteId: noteId, noteSelectionEpoch: Date.now() }),
@@ -650,6 +660,8 @@ export const useAppStore = create<AppState>()(
         wallpaperPath: state.wallpaperPath,
         ghostShortcut: state.ghostShortcut,
         captureShortcut: state.captureShortcut,
+        noteNewKey: state.noteNewKey,
+        noteSearchKey: state.noteSearchKey,
         remindersEnabled: state.remindersEnabled,
         reminderTime: state.reminderTime,
       }),
