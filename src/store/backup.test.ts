@@ -9,11 +9,11 @@ const sample = () => ({
   tasks: [
     {
       ID: 7, Category_ID: 1, Title: "Write report", Deadline_Date: "2026-11-05",
-      Completion_Date: null, Status: "pending", Position: 7,
+      Completion_Date: null, Reminder_Date: "2026-11-04", Status: "pending", Position: 7,
     },
     {
       ID: 9, Category_ID: 4, Title: "Laundry", Deadline_Date: null,
-      Completion_Date: "2026-11-01", Status: "completed", Position: null,
+      Completion_Date: "2026-11-01", Reminder_Date: null, Status: "completed", Position: null,
     },
   ],
   taskTags: [
@@ -92,6 +92,20 @@ describe("parseBackup rejects bad input", () => {
 
   it("rejects an unknown task Status", () => {
     expect(() => parseBackup(tampered((o) => { o.tasks[0].Status = "done"; }))).toThrow(/Status/);
+  });
+
+  it("reads an older backup that has no Reminder_Date as null", () => {
+    const parsed = parseBackup(tampered((o) => { for (const t of o.tasks) delete t.Reminder_Date; }));
+    expect(parsed.tasks.every((t) => t.Reminder_Date === null)).toBe(true);
+  });
+
+  it("keeps a valid Reminder_Date", () => {
+    const parsed = parseBackup(tampered((o) => { o.tasks[0].Reminder_Date = "2026-11-05"; }));
+    expect(parsed.tasks[0].Reminder_Date).toBe("2026-11-05");
+  });
+
+  it("rejects a Reminder_Date that is not YYYY-MM-DD", () => {
+    expect(() => parseBackup(tampered((o) => { o.tasks[0].Reminder_Date = "next week"; }))).toThrow(/Reminder_Date/);
   });
 
   it("rejects a deadline that is not YYYY-MM-DD", () => {

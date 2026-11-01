@@ -24,7 +24,8 @@ async function doCheck(time: string): Promise<void> {
   let last: string | null = null;
   try { last = localStorage.getItem(LAST_KEY); } catch { /* treat as never notified */ }
   if (!shouldNotifyNow(new Date(), time, last)) return;
-  const summary = buildReminderSummary(useAppStore.getState().tasks, localDateStr());
+  const { tasks, reminderLeadDays } = useAppStore.getState();
+  const summary = buildReminderSummary(tasks, localDateStr(), reminderLeadDays);
   if (!summary) return;
   try {
     if (!(await isPermissionGranted())) return;

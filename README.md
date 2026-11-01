@@ -47,7 +47,7 @@ Built on **Tauri 2** (a native Rust shell + a React/TypeScript frontend), Vellum
 **Settings → Shortcuts** lists every hotkey with where it works (Ghost Mode, New note, Search notes). Click a key box and press a new combo to change it; Reset restores the default.
 
 ### Deadline Reminder
-Turn on **Settings → Deadline Reminder** for one daily notification listing tasks due today or past due, at a time you choose, or when you open Vellum later in the day. Works while Vellum is running (pair it with *Launch on System Startup*).
+Turn on **Settings → Deadline Reminder** for one daily notification at a time you type in (24-hour clock). It lists open tasks that are overdue or due today, plus anything due within the next *N* days (you choose *N*, `0` = only today and overdue). Any task can also get its own **Remind on** date in the task editor (past days can't be picked). Opening Vellum after the set time still shows the day's notification once. Enable **Also remind when Vellum is closed** and a Windows scheduled task wakes Vellum in the background at that time, even after Quit.
 
 ### Never Lose a Draft
 An unsaved **New Note** is autosaved and comes back after closing the widget or restarting. With Notes open, **Ctrl + N** starts a new note and **Ctrl + F** jumps to note search (both rebindable).

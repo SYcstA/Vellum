@@ -12,6 +12,7 @@ import ConfirmModal from "./ConfirmModal";
 import CategoryCombobox from "./CategoryCombobox";
 import DatePicker from "./DatePicker";
 import { taskTiming } from "../utils/taskTiming";
+import { validateReminderDate } from "../utils/reminders";
 
 function ToDoWidget() {
   const tasks = useAppStore((s) => s.tasks);
@@ -71,6 +72,10 @@ function ToDoWidget() {
   const [fullEditTitle, setFullEditTitle] = useState("");
   const [fullEditCategory, setFullEditCategory] = useState("");
   const [fullEditDeadline, setFullEditDeadline] = useState("");
+  const [fullEditReminder, setFullEditReminder] = useState("");
+  const [inputReminder, setInputReminder] = useState("");
+  const [reminderError, setReminderError] = useState("");
+  const reminderTime = useAppStore((s) => s.reminderTime);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -89,9 +94,11 @@ function ToDoWidget() {
     const tags = parseTags(inputTag);
     if (tags.length === 0) tags.push("General");
     if (!title) return;
-    await addTask(title, tags, inputDeadline || undefined);
-    setInputTitle(""); setInputTag(""); setInputDeadline(""); setShowAddForm(false); setTagSuggestions([]);
-  }, [inputTitle, inputTag, inputDeadline, addTask]);
+    const bad = validateReminderDate(inputReminder, new Date(), reminderTime);
+    if (bad) { setReminderError(bad); return; }
+    await addTask(title, tags, inputDeadline || undefined, inputReminder || undefined);
+    setInputTitle(""); setInputTag(""); setInputDeadline(""); setInputReminder(""); setReminderError(""); setShowAddForm(false); setTagSuggestions([]);
+  }, [inputTitle, inputTag, inputDeadline, inputReminder, reminderTime, addTask]);
   const handleToggle = (taskId: string, currentlyCompleted: boolean) => toggleTask(parseInt(taskId.replace("t", ""), 10), currentlyCompleted);
   const handleDoubleClick = (taskId: string, currentText: string) => { setEditingTaskId(taskId); setEditValue(currentText); };
   const handleEditBlur = async () => {
@@ -111,6 +118,8 @@ function ToDoWidget() {
     setFullEditTitle(task.text);
     setFullEditCategory(task.tags.join(", "));
     setFullEditDeadline(task.deadlineDate || "");
+    setFullEditReminder(task.reminderDate || "");
+    setReminderError("");
   };
 
   const saveFullEdit = async () => {
@@ -120,7 +129,12 @@ function ToDoWidget() {
     if (tags.length === 0) tags.push("General");
     if (!title) return;
     const numId = parseInt(fullEditTask.taskId.replace("t", ""), 10);
-    await editTaskFully(numId, title, tags, fullEditDeadline || undefined);
+    // Only a CHANGED reminder date is checked, so an old past one never blocks other edits.
+    const saved = tasks.find((t) => t.id === fullEditTask.taskId)?.reminderDate || "";
+    const bad = fullEditReminder !== saved ? validateReminderDate(fullEditReminder, new Date(), reminderTime) : null;
+    if (bad) { setReminderError(bad); return; }
+    await editTaskFully(numId, title, tags, fullEditDeadline || undefined, fullEditReminder || undefined);
+    setReminderError("");
     setFullEditTask(null);
   };
 
@@ -253,6 +267,10 @@ function ToDoWidget() {
                 </div>
                 <DatePicker value={inputDeadline} onChange={(val) => setInputDeadline(val)} />
               </div>
+              <div className="space-y-1">
+                <DatePicker value={inputReminder} onChange={(val) => { setInputReminder(val); setReminderError(""); }} placeholder="Remind me on… (optional)" minDate={todayStr} />
+                {reminderError && <p className="text-[10px] text-red-400">{reminderError}</p>}
+              </div>
               <button onClick={handleSave} disabled={!inputTitle.trim()} className="w-full text-xs font-medium text-white bg-indigo-500/40 hover:bg-indigo-500/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-lg">+ Add Task</button>
             </div>
           )}
@@ -356,6 +374,18 @@ function ToDoWidget() {
                   ><X size={13} strokeWidth={2} /></button>
                 )}
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/50">Remind on:</span>
+                <DatePicker value={fullEditReminder} onChange={(val) => { setFullEditReminder(val); setReminderError(""); }} placeholder="None" minDate={todayStr} />
+                {fullEditReminder && (
+                  <button
+                    onClick={() => { setFullEditReminder(""); setReminderError(""); }}
+                    className="flex items-center text-red-400 hover:text-red-300 transition-colors ml-1"
+                    title="Clear reminder"
+                  ><X size={13} strokeWidth={2} /></button>
+                )}
+              </div>
+              {reminderError && <p className="text-[10px] text-red-400">{reminderError}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button

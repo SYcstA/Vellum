@@ -119,6 +119,13 @@ export async function initSchema(): Promise<void> {
     await d.execute(`UPDATE ${tbl} SET Position = ID WHERE Position IS NULL`);
   }
 
+  // v0.3: optional per-task reminder day (guarded ALTER, like the columns above).
+  try {
+    await d.execute("ALTER TABLE Tasks ADD COLUMN Reminder_Date TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Phase 2: indexes for the new read paths (calendar sync, bidirectional links,
   // category cascade, and reverse-chronological log reads).
   await d.execute("CREATE INDEX IF NOT EXISTS idx_ntt_task ON Note_Task_Tags(Task_ID)");
@@ -152,9 +159,10 @@ export async function fetchTasks(): Promise<Task[]> {
       Status: string;
       Completion_Date: string | null;
       Deadline_Date: string | null;
+      Reminder_Date: string | null;
     }[]
   >(
-    `SELECT Tasks.ID, Tasks.Title, Tasks.Status, Tasks.Completion_Date, Tasks.Deadline_Date,
+    `SELECT Tasks.ID, Tasks.Title, Tasks.Status, Tasks.Completion_Date, Tasks.Deadline_Date, Tasks.Reminder_Date,
             PC.Name AS Primary_Name,
             (SELECT group_concat(C.Name, char(31))
                FROM Task_Tags TT JOIN Categories C ON TT.Tag_ID = C.ID
@@ -176,6 +184,7 @@ export async function fetchTasks(): Promise<Task[]> {
       completed: r.Status === "completed",
       completionDate: r.Completion_Date || undefined,
       deadlineDate: r.Deadline_Date || undefined,
+      reminderDate: r.Reminder_Date || undefined,
     };
   });
 }
@@ -262,7 +271,8 @@ export async function fetchAllTags(): Promise<string[]> {
 export async function createTask(
   title: string,
   tags: string[],
-  deadlineDate?: string
+  deadlineDate?: string,
+  reminderDate?: string
 ): Promise<{ taskId: number; catId: number; catName: string }> {
   const d = await getDb();
   const cleanTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
@@ -270,17 +280,10 @@ export async function createTask(
 
   const primaryId = await getOrCreateCategoryId(d, cleanTags[0]);
 
-  if (deadlineDate) {
-    await d.execute(
-      "INSERT INTO Tasks (Category_ID, Title, Status, Deadline_Date) VALUES (?1, ?2, 'pending', ?3)",
-      [primaryId, title, deadlineDate]
-    );
-  } else {
-    await d.execute(
-      "INSERT INTO Tasks (Category_ID, Title, Status) VALUES (?1, ?2, 'pending')",
-      [primaryId, title]
-    );
-  }
+  await d.execute(
+    "INSERT INTO Tasks (Category_ID, Title, Status, Deadline_Date, Reminder_Date) VALUES (?1, ?2, 'pending', ?3, ?4)",
+    [primaryId, title, deadlineDate || null, reminderDate || null]
+  );
 
   const lastRows = await d.select<{ ID: number }[]>(
     "SELECT MAX(ID) as ID FROM Tasks WHERE Category_ID = ?1 AND Title = ?2",
@@ -349,7 +352,8 @@ export async function updateTaskFull(
   taskId: number,
   title: string,
   tags: string[],
-  deadlineDate?: string
+  deadlineDate?: string,
+  reminderDate?: string
 ): Promise<void> {
   const d = await getDb();
   const cleanTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
@@ -357,17 +361,10 @@ export async function updateTaskFull(
 
   const primaryId = await getOrCreateCategoryId(d, cleanTags[0]);
 
-  if (deadlineDate) {
-    await d.execute(
-      "UPDATE Tasks SET Title = ?1, Category_ID = ?2, Deadline_Date = ?3 WHERE ID = ?4",
-      [title, primaryId, deadlineDate, taskId]
-    );
-  } else {
-    await d.execute(
-      "UPDATE Tasks SET Title = ?1, Category_ID = ?2, Deadline_Date = NULL WHERE ID = ?3",
-      [title, primaryId, taskId]
-    );
-  }
+  await d.execute(
+    "UPDATE Tasks SET Title = ?1, Category_ID = ?2, Deadline_Date = ?3, Reminder_Date = ?4 WHERE ID = ?5",
+    [title, primaryId, deadlineDate || null, reminderDate || null, taskId]
+  );
 
   // Replace the tag set.
   await d.execute("DELETE FROM Task_Tags WHERE Task_ID = ?1", [taskId]);
@@ -632,7 +629,7 @@ export async function dumpTables(): Promise<BackupTables> {
   const [categories, tasks, taskTags, notes, noteTaskTags, logs] = await Promise.all([
     d.select<BackupTables["categories"]>("SELECT ID, Name FROM Categories ORDER BY ID"),
     d.select<BackupTables["tasks"]>(
-      "SELECT ID, Category_ID, Title, Deadline_Date, Completion_Date, Status, Position FROM Tasks ORDER BY ID"
+      "SELECT ID, Category_ID, Title, Deadline_Date, Completion_Date, Reminder_Date, Status, Position FROM Tasks ORDER BY ID"
     ),
     d.select<BackupTables["taskTags"]>("SELECT Task_ID, Tag_ID FROM Task_Tags ORDER BY Task_ID, Tag_ID"),
     d.select<BackupTables["notes"]>("SELECT ID, Title, Content, Position FROM Notes ORDER BY ID"),
@@ -667,8 +664,8 @@ export async function replaceAllTables(b: BackupTables): Promise<void> {
   }
   for (const t of b.tasks) {
     await d.execute(
-      "INSERT INTO Tasks (ID, Category_ID, Title, Deadline_Date, Completion_Date, Status, Position) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-      [t.ID, t.Category_ID, t.Title, t.Deadline_Date, t.Completion_Date, t.Status, t.Position]
+      "INSERT INTO Tasks (ID, Category_ID, Title, Deadline_Date, Completion_Date, Reminder_Date, Status, Position) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+      [t.ID, t.Category_ID, t.Title, t.Deadline_Date, t.Completion_Date, t.Reminder_Date, t.Status, t.Position]
     );
   }
   for (const r of b.taskTags) {

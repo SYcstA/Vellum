@@ -11,6 +11,7 @@ export type BackupV1 = {
     Title: string;
     Deadline_Date: string | null;
     Completion_Date: string | null;
+    Reminder_Date: string | null;
     Status: string;
     Position: number | null;
   }[];
@@ -43,14 +44,14 @@ export function serializeBackup(t: BackupTables, now: Date = new Date()): string
   return JSON.stringify(out, null, 2);
 }
 
-type Kind = "int" | "str" | "intOrNull" | "strOrNull";
+type Kind = "int" | "str" | "intOrNull" | "strOrNull" | "optStrOrNull";
 type Shape = Record<string, Kind>;
 
 const SHAPES: Record<keyof BackupTables, Shape> = {
   categories: { ID: "int", Name: "str" },
   tasks: {
     ID: "int", Category_ID: "int", Title: "str", Deadline_Date: "strOrNull",
-    Completion_Date: "strOrNull", Status: "str", Position: "intOrNull",
+    Completion_Date: "strOrNull", Reminder_Date: "optStrOrNull", Status: "str", Position: "intOrNull",
   },
   taskTags: { Task_ID: "int", Tag_ID: "int" },
   notes: { ID: "int", Title: "str", Content: "str", Position: "intOrNull" },
@@ -67,6 +68,7 @@ function kindOk(v: unknown, k: Kind): boolean {
     case "str": return typeof v === "string";
     case "intOrNull": return v === null || Number.isInteger(v);
     case "strOrNull": return v === null || typeof v === "string";
+    case "optStrOrNull": return v === undefined || v === null || typeof v === "string";
   }
 }
 
@@ -110,6 +112,8 @@ export function parseBackup(json: string): BackupV1 {
   }
 
   const b = o as unknown as BackupV1;
+  // Backups written before reminder dates existed simply lack the field.
+  for (const t of b.tasks) t.Reminder_Date ??= null;
 
   const idSet = (table: "categories" | "tasks" | "notes") => {
     const ids = new Set<number>();
@@ -128,7 +132,7 @@ export function parseBackup(json: string): BackupV1 {
     if (t.Status !== "pending" && t.Status !== "completed") {
       fail(`tasks[${i}].Status "${t.Status}" must be "pending" or "completed".`);
     }
-    for (const col of ["Deadline_Date", "Completion_Date"] as const) {
+    for (const col of ["Deadline_Date", "Completion_Date", "Reminder_Date"] as const) {
       const v = t[col];
       if (v !== null && !isoDay.test(v)) fail(`tasks[${i}].${col} "${v}" must look like YYYY-MM-DD.`);
     }

@@ -42,6 +42,8 @@ export type Task = {
   completed: boolean;
   completionDate?: string;
   deadlineDate?: string;
+  /** Own reminder day (YYYY-MM-DD): the daily summary mentions the task that day. */
+  reminderDate?: string;
 };
 
 export type Note = {
@@ -101,9 +103,12 @@ interface AppState {
   reminderWhenClosed: boolean;
   /** Local "HH:mm" at which the daily deadline summary is shown. */
   reminderTime: string;
+  /** Also mention tasks due within this many days (0 = only due today / overdue). */
+  reminderLeadDays: number;
   setRemindersEnabled: (on: boolean) => void;
   setReminderWhenClosed: (on: boolean) => void;
   setReminderTime: (time: string) => void;
+  setReminderLeadDays: (days: number) => void;
 
   /* Non-persisted data */
   tasks: Task[];
@@ -116,10 +121,10 @@ interface AppState {
 
   /* Actions */
   loadData: () => Promise<void>;
-  addTask: (title: string, tags: string[], deadlineDate?: string) => Promise<void>;
+  addTask: (title: string, tags: string[], deadlineDate?: string, reminderDate?: string) => Promise<void>;
   toggleTask: (taskId: number, currentlyCompleted: boolean) => Promise<void>;
   editTaskTitle: (taskId: number, newTitle: string) => Promise<void>;
-  editTaskFully: (taskId: number, title: string, tags: string[], deadlineDate?: string) => Promise<void>;
+  editTaskFully: (taskId: number, title: string, tags: string[], deadlineDate?: string, reminderDate?: string) => Promise<void>;
   addTagToTask: (taskId: string, tagName: string) => Promise<void>;
   removeTagFromTask: (taskId: string, tagName: string) => Promise<void>;
   editNoteTitle: (noteId: number, newTitle: string) => Promise<void>;
@@ -285,6 +290,7 @@ export const useAppStore = create<AppState>()(
       remindersEnabled: false,
       reminderWhenClosed: false,
       reminderTime: "09:00",
+      reminderLeadDays: 0,
       widgetPositions: {
         todo: { x: 50, y: 50, width: 420, height: 400 },
         calendar: { x: 500, y: 50, width: 360, height: 390 },
@@ -305,6 +311,7 @@ export const useAppStore = create<AppState>()(
       setRemindersEnabled: (on) => set({ remindersEnabled: on }),
       setReminderWhenClosed: (on) => set({ reminderWhenClosed: on }),
       setReminderTime: (time) => set({ reminderTime: time }),
+      setReminderLeadDays: (days) => set({ reminderLeadDays: days }),
       setHighlightedNoteId: (noteId) => set({ highlightedNoteId: noteId, noteSelectionEpoch: Date.now() }),
 
       /* ─── NON-PERSISTED STATE ─── */
@@ -356,16 +363,16 @@ export const useAppStore = create<AppState>()(
 
       /* ─── TRUE OPTIMISTIC UI MUTATIONS ─── */
 
-      addTask: async (title, tags, deadlineDate) => {
+      addTask: async (title, tags, deadlineDate, reminderDate) => {
         const state = get();
         const cleanTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
         if (cleanTags.length === 0) cleanTags.push("General");
         const maxId = state.tasks.reduce((max, t) => Math.max(max, numericId(t.id)), 0);
         const tempId = `t${maxId + 1}`;
         const mergedTags = Array.from(new Set([...state.tags, ...cleanTags])).sort();
-        set({ tasks: [...state.tasks, { id: tempId, text: title, tags: cleanTags, completed: false, deadlineDate: deadlineDate || undefined }], tags: mergedTags });
+        set({ tasks: [...state.tasks, { id: tempId, text: title, tags: cleanTags, completed: false, deadlineDate: deadlineDate || undefined, reminderDate: reminderDate || undefined }], tags: mergedTags });
         try {
-          const result = await createTask(title, cleanTags, deadlineDate);
+          const result = await createTask(title, cleanTags, deadlineDate, reminderDate);
           const realId = `t${result.taskId}`;
           set((s) => ({
             tasks: s.tasks.map((t) => (t.id === tempId ? { ...t, id: realId } : t)),
@@ -404,7 +411,7 @@ export const useAppStore = create<AppState>()(
         try { await updateTaskTitle(taskId, newTitle); } catch (err) { set({ tasks: prev }); }
       },
 
-      editTaskFully: async (taskId, title, tags, deadlineDate) => {
+      editTaskFully: async (taskId, title, tags, deadlineDate, reminderDate) => {
         const cleanTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
         if (cleanTags.length === 0) cleanTags.push("General");
         // Capture the BEFORE state for the advanced-log delta.
@@ -414,14 +421,14 @@ export const useAppStore = create<AppState>()(
             optimistic: (s) => ({
               tasks: s.tasks.map((t) =>
                 numericId(t.id) === taskId
-                  ? { ...t, text: title, tags: cleanTags, deadlineDate: deadlineDate || undefined }
+                  ? { ...t, text: title, tags: cleanTags, deadlineDate: deadlineDate || undefined, reminderDate: reminderDate || undefined }
                   : t
               ),
               // Ensure every tag exists in the tags list
               tags: Array.from(new Set([...s.tags, ...cleanTags])).sort(),
             }),
             rollbackKeys: ["tasks", "tags"],
-            write: () => updateTaskFull(taskId, title, cleanTags, deadlineDate),
+            write: () => updateTaskFull(taskId, title, cleanTags, deadlineDate, reminderDate),
             log: () => {
               // Build delta parts ("·"-separated). First segment = simple view;
               // the rest is surfaced only in the Activity Log's Advanced mode.
@@ -430,6 +437,8 @@ export const useAppStore = create<AppState>()(
                 if (prev.text !== title) parts.push(`renamed from "${prev.text}"`);
                 const od = prev.deadlineDate || "none", nd = deadlineDate || "none";
                 if (od !== nd) parts.push(`deadline ${od} → ${nd}`);
+                const or = prev.reminderDate || "none", nr = reminderDate || "none";
+                if (or !== nr) parts.push(`reminder ${or} → ${nr}`);
                 const added = cleanTags.filter((t) => !prev.tags.includes(t));
                 const removed = prev.tags.filter((t) => !cleanTags.includes(t));
                 if (added.length) parts.push(`+tags [${added.join(", ")}]`);
@@ -672,6 +681,7 @@ export const useAppStore = create<AppState>()(
         remindersEnabled: state.remindersEnabled,
         reminderWhenClosed: state.reminderWhenClosed,
         reminderTime: state.reminderTime,
+        reminderLeadDays: state.reminderLeadDays,
       }),
     }
   )

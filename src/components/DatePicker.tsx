@@ -8,6 +8,10 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 type DatePickerProps = {
   value: string;
   onChange: (date: string) => void;
+  /** Text shown when empty (default "Deadline"). */
+  placeholder?: string;
+  /** Earlier days (YYYY-MM-DD) are greyed out and cannot be picked. */
+  minDate?: string;
 };
 
 const MONTHS = [
@@ -15,7 +19,7 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-function DatePicker({ value, onChange }: DatePickerProps) {
+function DatePicker({ value, onChange, placeholder = "Deadline", minDate }: DatePickerProps) {
   const widgetThemeColor = useAppStore((s) => s.widgetThemeColor);
   const widgetOpacity = useAppStore((s) => s.widgetOpacity);
   const [open, setOpen] = useState(false);
@@ -69,7 +73,7 @@ function DatePicker({ value, onChange }: DatePickerProps) {
 
   const displayValue = value
     ? `${value.slice(8, 10)} ${MONTHS[parseInt(value.slice(5, 7), 10) - 1].slice(0, 3)} ${value.slice(0, 4)}`
-    : "Deadline";
+    : placeholder;
 
   const txtMuted = isLight ? "text-gray-400" : "text-white/40";
   const txtBody = isLight ? "text-gray-900" : "text-white/80";
@@ -83,9 +87,10 @@ function DatePicker({ value, onChange }: DatePickerProps) {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     const isSel = dateStr === value;
     const isToday = dateStr === todayStr;
+    const blocked = !!minDate && dateStr < minDate;
     cells.push(
-      <button key={d} onClick={() => handleSelect(d)} title={isToday ? "Today" : undefined}
-        className={`text-xs rounded-lg py-1 transition-colors ${isToday ? "ring-1 ring-indigo-400/80 font-semibold" : ""} ${isSel ? "bg-indigo-500/40 text-indigo-200" : `${txtBody} hover:bg-white/10`}`}>
+      <button key={d} onClick={() => handleSelect(d)} disabled={blocked} title={blocked ? "Already passed" : isToday ? "Today" : undefined}
+        className={`text-xs rounded-lg py-1 transition-colors ${isToday ? "ring-1 ring-indigo-400/80 font-semibold" : ""} ${blocked ? "opacity-25 cursor-not-allowed" : ""} ${isSel ? "bg-indigo-500/40 text-indigo-200" : `${txtBody} ${blocked ? "" : "hover:bg-white/10"}`}`}>
         {d}
       </button>
     );

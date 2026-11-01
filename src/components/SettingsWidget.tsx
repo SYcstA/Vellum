@@ -154,6 +154,8 @@ function SettingsWidget() {
   const setRemindersEnabled = useAppStore((s) => s.setRemindersEnabled);
   const reminderTime = useAppStore((s) => s.reminderTime);
   const reminderWhenClosed = useAppStore((s) => s.reminderWhenClosed);
+  const reminderLeadDays = useAppStore((s) => s.reminderLeadDays);
+  const setReminderLeadDays = useAppStore((s) => s.setReminderLeadDays);
   const setReminderWhenClosed = useAppStore((s) => s.setReminderWhenClosed);
   const setReminderTime = useAppStore((s) => s.setReminderTime);
   const [reminderError, setReminderError] = useState("");
@@ -366,6 +368,17 @@ function SettingsWidget() {
                 </button>
                 <TimeSelect24 value={reminderTime} disabled={!remindersEnabled} onChange={setReminderTime} isLight={isLight} />
               </div>
+              {remindersEnabled && (
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className={`text-[11px] ${isLight ? "text-gray-600" : "text-white/60"}`}>Also include tasks due within</span>
+                  <div className="flex items-center gap-1">
+                    <TimePartInput value={String(reminderLeadDays).padStart(2, "0")} max={30} label="Days ahead" disabled={false}
+                      onCommit={(v) => setReminderLeadDays(Number(v))}
+                      cls={`text-xs font-mono px-1 py-1.5 rounded-lg border outline-none ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-white/5 text-white/80 border-white/10"}`} />
+                    <span className={`text-[11px] ${isLight ? "text-gray-600" : "text-white/60"}`}>days</span>
+                  </div>
+                </div>
+              )}
               {remindersEnabled && (
                 <button onClick={handleToggleWhenClosed} className={`mt-1.5 w-full flex items-center justify-center gap-1.5 text-xs font-medium transition-colors px-3 py-1.5 rounded-lg border ${reminderWhenClosed ? "text-emerald-300 bg-emerald-500/20 border-emerald-500/30" : `${isLight ? "bg-gray-100 text-gray-600 border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:border-white/30"}`}`}>
                   {reminderWhenClosed && <Check size={13} strokeWidth={2.5} />}Also remind when Vellum is closed
