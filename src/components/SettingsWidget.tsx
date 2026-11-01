@@ -204,6 +204,7 @@ function SettingsWidget() {
 
   const [reminderInfo, setReminderInfo] = useState("");
   const lastSent = (() => { try { return localStorage.getItem("vellum_last_reminder"); } catch { return null; } })();
+  const lastCheck = (() => { try { return localStorage.getItem("vellum_reminder_status"); } catch { return null; } })();
 
   // Separates "Windows is not showing Vellum's toasts" from "no task qualified today".
   const handleTestNotification = async () => {
@@ -407,6 +408,9 @@ function SettingsWidget() {
                   </span>
                   <button onClick={handleTestNotification} className={`text-[10px] font-medium px-2 py-1 rounded-lg border transition-colors ${isLight ? "bg-gray-100 text-gray-600 border-gray-300 hover:text-gray-800" : "bg-white/5 text-white/60 border-white/10 hover:text-white/90 hover:border-white/30"}`}>Send test</button>
                 </div>
+              )}
+              {remindersEnabled && lastCheck && (
+                <p className={`text-[10px] mt-1 break-words ${isLight ? "text-gray-400" : "text-white/30"}`}>Last check: {lastCheck}</p>
               )}
               {reminderInfo && <p className={`text-[10px] mt-1 ${isLight ? "text-gray-500" : "text-white/50"}`}>{reminderInfo}</p>}
               <p className={`text-[10px] mt-1 ${isLight ? "text-gray-400" : "text-white/30"}`}>

@@ -75,3 +75,26 @@ export function validateReminderDate(date: string, now: Date, reminderTime: stri
   }
   return null;
 }
+
+export type ReminderDecision =
+  | { send: true; summary: { title: string; body: string } }
+  | { send: false; reason: string };
+
+/** Send or skip for the daily toast, with a human-readable reason when skipping. */
+export function decideReminder(
+  now: Date,
+  reminderTime: string,
+  lastNotified: string | null,
+  tasks: Remindable[],
+  leadDays: number
+): ReminderDecision {
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(reminderTime)) return { send: false, reason: "invalid reminder time" };
+  if (lastNotified === dayOf(now)) return { send: false, reason: "already sent today" };
+  if (!shouldNotifyNow(now, reminderTime, lastNotified)) return { send: false, reason: `waiting for ${reminderTime}` };
+  const summary = buildReminderSummary(tasks, dayOf(now), leadDays);
+  if (!summary) {
+    const open = tasks.filter((t) => !t.completed).length;
+    return { send: false, reason: `nothing due (${open} open, none due today/overdue${leadDays > 0 ? ` or within ${leadDays}d` : ""})` };
+  }
+  return { send: true, summary };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReminderSummary, shouldNotifyNow, validateReminderDate } from "./reminders";
+import { buildReminderSummary, decideReminder, shouldNotifyNow, validateReminderDate } from "./reminders";
 
 const TODAY = "2026-11-01";
 const t = (text: string, deadlineDate?: string, completed = false, reminderDate?: string) => ({
@@ -153,5 +153,41 @@ describe("validateReminderDate", () => {
   it("rejects today once the daily reminder time has passed", () => {
     expect(validateReminderDate("2026-11-01", at(9, 0), "09:00")).toMatch(/09:00/);
     expect(validateReminderDate("2026-11-01", at(18, 30), "09:00")).toMatch(/passed/i);
+  });
+});
+
+describe("decideReminder (why a toast is, or is not, sent)", () => {
+  const now = (h: number, m: number) => new Date(2026, 10, 1, h, m, 0);
+  const open = [t("pay rent", TODAY)];
+
+  it("sends when the time has passed, nothing was sent today and a task qualifies", () => {
+    const d = decideReminder(now(9, 1), "09:00", null, open, 0);
+    expect(d.send).toBe(true);
+    if (d.send) expect(d.summary.body).toContain("pay rent");
+  });
+
+  it("explains it is waiting for the reminder time", () => {
+    const d = decideReminder(now(8, 0), "09:00", null, open, 0);
+    expect(d).toEqual({ send: false, reason: "waiting for 09:00" });
+  });
+
+  it("explains it already sent today", () => {
+    const d = decideReminder(now(12, 0), "09:00", "2026-11-01", open, 0);
+    expect(d).toEqual({ send: false, reason: "already sent today" });
+  });
+
+  it("explains when nothing qualifies, mentioning the open-task counts", () => {
+    const d = decideReminder(now(12, 0), "09:00", null, [t("far", "2026-12-31"), t("no deadline")], 0);
+    expect(d.send).toBe(false);
+    if (!d.send) {
+      expect(d.reason).toMatch(/nothing due/i);
+      expect(d.reason).toContain("2 open");
+    }
+  });
+
+  it("flags an invalid time", () => {
+    const d = decideReminder(now(12, 0), "", null, open, 0);
+    expect(d.send).toBe(false);
+    if (!d.send) expect(d.reason).toMatch(/invalid/i);
   });
 });

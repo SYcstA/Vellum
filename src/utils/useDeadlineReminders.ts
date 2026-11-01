@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { isPermissionGranted, sendNotification } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useAppStore } from "../store/useAppStore";
 import { localDateStr } from "./date";
-import { buildReminderSummary, shouldNotifyNow } from "./reminders";
+import { decideReminder } from "./reminders";
 
 const LAST_KEY = "vellum_last_reminder";
+const STATUS_KEY = "vellum_reminder_status";
 
 let inFlight: Promise<void> | null = null;
 
@@ -20,18 +21,33 @@ function checkAndNotify(time: string): Promise<void> {
   return inFlight;
 }
 
+/** Last outcome, shown in Settings so a silent skip can be explained. */
+function record(msg: string): void {
+  try {
+    const d = new Date();
+    const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    localStorage.setItem(STATUS_KEY, `${hhmm} · ${msg}`);
+  } catch { /* status is best-effort */ }
+}
+
 async function doCheck(time: string): Promise<void> {
   let last: string | null = null;
   try { last = localStorage.getItem(LAST_KEY); } catch { /* treat as never notified */ }
-  if (!shouldNotifyNow(new Date(), time, last)) return;
   const { tasks, reminderLeadDays } = useAppStore.getState();
-  const summary = buildReminderSummary(tasks, localDateStr(), reminderLeadDays);
-  if (!summary) return;
+  const decision = decideReminder(new Date(), time, last, tasks, reminderLeadDays);
+  if (!decision.send) { record(`skipped: ${decision.reason}`); return; }
   try {
-    if (!(await isPermissionGranted())) return;
-    sendNotification(summary);
+    // Same rule as the Settings "Send test" button: ask if not already allowed.
+    // (Bailing out silently on a "no" is how reminders went missing while the test worked.)
+    if (!(await isPermissionGranted())) {
+      const answer = await requestPermission();
+      if (answer !== "granted") record(`permission answer was "${answer}"; sending anyway`);
+    }
+    sendNotification(decision.summary);
     localStorage.setItem(LAST_KEY, localDateStr());
+    record(`sent: ${decision.summary.body}`);
   } catch (err) {
+    record(`error: ${String(err)}`);
     console.error("Deadline reminder failed:", err);
   }
 }
