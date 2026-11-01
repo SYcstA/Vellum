@@ -28,6 +28,17 @@
     "autostart:default",
     "dialog:default",
     "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$APPDATA/backups" }, { "path": "$APPDATA/backups/**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "$APPDATA/backups" }, { "path": "$APPDATA/backups/**" }]
+    },
     "global-shortcut:default",
     "window-state:default"
   ]

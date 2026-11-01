@@ -8,6 +8,8 @@ import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
 import { X, Check, Trash2 } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
+import { exportBackup, pickBackup, applyBackup } from "../store/backupIO";
+import type { BackupV1 } from "../store/backup";
 import { acceleratorFromEvent, prettyShortcut, DEFAULT_GHOST_SHORTCUT } from "../utils/shortcut";
 
 function SettingsWidget() {
@@ -25,6 +27,11 @@ function SettingsWidget() {
   const setGhostShortcut = useAppStore((s) => s.setGhostShortcut);
   useWidgetBoundaryClamp("settings", widgetPos, setWidgetPos);
 
+  const loadData = useAppStore((s) => s.loadData);
+  const refreshLogs = useAppStore((s) => s.refreshLogs);
+  const [pendingImport, setPendingImport] = useState<BackupV1 | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [autoStartEnabled, setAutoStartEnabled] = useState(false);
   const [capturingShortcut, setCapturingShortcut] = useState(false);
@@ -88,6 +95,49 @@ function SettingsWidget() {
       // Resync on failure too.
       try { setAutoStartEnabled(await isEnabled()); }
       catch (resyncErr) { console.error("Autostart resync failed:", resyncErr); }
+    }
+  };
+
+  const handleExport = async () => {
+    setBackupBusy(true);
+    try {
+      const path = await exportBackup();
+      if (path) setBackupMsg({ ok: true, text: `Exported to ${path}` });
+    } catch (err) {
+      setBackupMsg({ ok: false, text: `Export failed: ${String(err)}` });
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  // Parse + validate first; nothing is touched until the user confirms.
+  const handlePickImport = async () => {
+    setBackupBusy(true);
+    try {
+      const picked = await pickBackup();
+      if (picked) { setPendingImport(picked.backup); setBackupMsg(null); }
+    } catch (err) {
+      setBackupMsg({ ok: false, text: String(err instanceof Error ? err.message : err) });
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    const backup = pendingImport;
+    setPendingImport(null);
+    if (!backup) return;
+    setBackupBusy(true);
+    try {
+      const safetyPath = await applyBackup(backup);
+      await loadData();
+      await refreshLogs();
+      setBackupMsg({ ok: true, text: `Imported. Previous data saved to ${safetyPath}` });
+    } catch (err) {
+      setBackupMsg({ ok: false, text: `Import failed: ${String(err)}. Data may be incomplete; restore from the backups folder in the app data directory.` });
+      await loadData();
+    } finally {
+      setBackupBusy(false);
     }
   };
 
@@ -193,6 +243,21 @@ function SettingsWidget() {
               </p>
               {shortcutError && <p className="text-[10px] text-red-400 mt-1">{shortcutError}</p>}
             </div>
+            {/* Backup */}
+            <div>
+              <p className={`text-xs ${textSecondary} mb-2`}>Backup</p>
+              <div className="flex gap-1.5">
+                {([["Export…", handleExport], ["Import…", handlePickImport]] as const).map(([label, fn]) => (
+                  <button key={label} onClick={fn} disabled={backupBusy}
+                    className={`flex-1 text-xs font-medium transition-colors px-3 py-2 rounded-lg border disabled:opacity-50 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400" : "bg-white/5 text-white/70 border-white/10 hover:border-white/30"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {backupMsg && (
+                <p className={`text-[10px] mt-1 break-all ${backupMsg.ok ? (isLight ? "text-gray-500" : "text-white/50") : "text-red-400"}`}>{backupMsg.text}</p>
+              )}
+            </div>
             {/* Danger Zone */}
             <div>
               <p className={`text-xs ${textSecondary} mb-2`}>Danger Zone</p>
@@ -201,6 +266,17 @@ function SettingsWidget() {
           </div>
         </div>
       </Rnd>
+      <ConfirmModal
+        open={pendingImport !== null}
+        title="Import backup"
+        message={pendingImport
+          ? `This replaces ALL current data with the file's ${pendingImport.tasks.length} tasks, ${pendingImport.notes.length} notes, ${pendingImport.categories.length} tags, ${pendingImport.logs.length} log entries (exported ${pendingImport.exportedAt.slice(0, 10)}). Your current data is saved to a safety copy first.`
+          : ""}
+        confirmLabel="Replace data"
+        confirmTone="primary"
+        onConfirm={handleConfirmImport}
+        onCancel={() => setPendingImport(null)}
+      />
       <ConfirmModal open={showResetConfirm} title="Factory Reset" message="Are you sure you want to delete ALL data? This action cannot be undone." confirmLabel="Delete Everything" onConfirm={handleFactoryReset} onCancel={() => setShowResetConfirm(false)} />
     </>
   );

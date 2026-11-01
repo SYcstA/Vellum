@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBackup, serializeBackup } from "./backup";
+import { backupFileName, parseBackup, preImportFileName, serializeBackup } from "./backup";
 
 const sample = () => ({
   categories: [
@@ -120,5 +120,15 @@ describe("parseBackup rejects bad input", () => {
 
   it("rejects a noteTaskTags row pointing to a missing task", () => {
     expect(() => parseBackup(tampered((o) => { o.noteTaskTags[0].Task_ID = 99; }))).toThrow(/noteTaskTags/);
+  });
+});
+
+describe("backup file names", () => {
+  const d = new Date(2026, 10, 1, 9, 5, 7); // local 2026-11-01 09:05:07
+  it("names a manual export by local date", () => {
+    expect(backupFileName(d)).toBe("vellum-backup-2026-11-01.json");
+  });
+  it("names the automatic pre-import export by local date and time", () => {
+    expect(preImportFileName(d)).toBe("vellum-pre-import-20261101-090507.json");
   });
 });

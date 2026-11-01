@@ -154,3 +154,17 @@ export function parseBackup(json: string): BackupV1 {
 
   return b;
 }
+
+const p2 = (n: number) => String(n).padStart(2, "0");
+
+/** Default name for a manual export, by local date. */
+export function backupFileName(now: Date = new Date()): string {
+  return `vellum-backup-${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}.json`;
+}
+
+/** Name for the automatic safety export taken just before an import. */
+export function preImportFileName(now: Date = new Date()): string {
+  const date = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}`;
+  const time = `${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`;
+  return `vellum-pre-import-${date}-${time}.json`;
+}
