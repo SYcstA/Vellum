@@ -1,12 +1,13 @@
 import Database from "@tauri-apps/plugin-sql";
 import type { Task, Note, LogEntry } from "./useAppStore";
 import type { BackupTables } from "./backup";
+import { dbUrl } from "./dbName";
 
 let db: Database | null = null;
 
 export async function getDb(): Promise<Database> {
   if (db) return db;
-  db = await Database.load("sqlite:productivity.db");
+  db = await Database.load(dbUrl(import.meta.env.DEV));
   // NOTE: sqlx (plugin-sql's backend) already issues `PRAGMA foreign_keys = ON`
   // on every pooled connection by default, so ON DELETE CASCADE is reliably
   // active. This call reaffirms intent but only affects whichever pooled
