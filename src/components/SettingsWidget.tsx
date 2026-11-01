@@ -77,21 +77,30 @@ function ShortcutRow({ label, hint, value, defaultValue, apply, isLight }: {
   );
 }
 
-/** Hour + minute pickers. A native <input type="time"> follows the Windows locale (12 h); this is always 24 h. */
+/**
+ * Hour + minute pickers, always 24 h (a native <input type="time"> follows the
+ * Windows locale). Minutes go in steps of 5; a saved odd value stays selectable.
+ * `colorScheme` makes the native popup follow the widget theme (otherwise it is
+ * white-on-white in dark mode).
+ */
 function TimeSelect24({ value, disabled, onChange, isLight }: {
   value: string; disabled: boolean; onChange: (hhmm: string) => void; isLight: boolean;
 }) {
   const [h, m] = value.split(":");
-  const cls = `text-xs font-mono px-1.5 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-white/5 text-white/70 border-white/10"}`;
+  const cls = `text-xs font-mono px-1.5 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-zinc-900 text-white/80 border-white/10"}`;
   const two = (n: number) => String(n).padStart(2, "0");
+  const minutes = Array.from({ length: 12 }, (_, i) => two(i * 5));
+  if (!minutes.includes(m)) minutes.push(m);
+  minutes.sort();
+  const scheme = { colorScheme: isLight ? "light" : "dark" } as const;
   return (
     <div className="flex items-center gap-1" title="Reminder time (24-hour)">
-      <select value={h} disabled={disabled} onChange={(e) => onChange(`${e.target.value}:${m}`)} className={cls} aria-label="Hour">
+      <select value={h} disabled={disabled} onChange={(e) => onChange(`${e.target.value}:${m}`)} className={cls} style={scheme} aria-label="Hour">
         {Array.from({ length: 24 }, (_, i) => <option key={i} value={two(i)}>{two(i)}</option>)}
       </select>
       <span className={isLight ? "text-gray-500" : "text-white/40"}>:</span>
-      <select value={m} disabled={disabled} onChange={(e) => onChange(`${h}:${e.target.value}`)} className={cls} aria-label="Minute">
-        {Array.from({ length: 60 }, (_, i) => <option key={i} value={two(i)}>{two(i)}</option>)}
+      <select value={m} disabled={disabled} onChange={(e) => onChange(`${h}:${e.target.value}`)} className={cls} style={scheme} aria-label="Minute">
+        {minutes.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
       </select>
     </div>
   );
