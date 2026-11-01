@@ -14,10 +14,16 @@ import { useAppStore } from "./store/useAppStore";
 import { useWindowBoundaryGuard } from "./utils/window";
 import { DEFAULT_GHOST_SHORTCUT, LEGACY_GHOST_SHORTCUT } from "./utils/shortcut";
 import { initSchema, markSeeded } from "./store/db";
+import { useAppHotkeys } from "./utils/hotkeys";
 import "./App.css";
 
 function App() {
   useWindowBoundaryGuard();
+  const requestNoteAction = useAppStore((s) => s.requestNoteAction);
+  useAppHotkeys({
+    "Ctrl+N": () => requestNoteAction("new"),
+    "Ctrl+F": () => requestNoteAction("search"),
+  });
   const isToDoOpen = useAppStore((s) => s.isToDoOpen);
   const isCalendarOpen = useAppStore((s) => s.isCalendarOpen);
   const isNotesOpen = useAppStore((s) => s.isNotesOpen);

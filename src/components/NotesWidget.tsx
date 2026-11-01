@@ -9,6 +9,7 @@ import ConfirmModal from "./ConfirmModal";
 import RichTextEditor from "./RichTextEditor";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { createPortal } from "react-dom";
+import { loadDraft, saveDraft, clearDraft } from "../utils/draft";
 
 function NotesWidget() {
   const notes = useAppStore((s) => s.notes);
@@ -32,12 +33,17 @@ function NotesWidget() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
-  const [addingNote, setAddingNote] = useState(false);
-  const [newNoteTitle, setNewNoteTitle] = useState("");
-  const [newNoteContent, setNewNoteContent] = useState("");
+  // An unsaved New Note from a previous run/close is restored (see utils/draft.ts).
+  const [initialDraft] = useState(loadDraft);
+  const [addingNote, setAddingNote] = useState(initialDraft !== null);
+  const [newNoteTitle, setNewNoteTitle] = useState(initialDraft?.title ?? "");
+  const [newNoteContent, setNewNoteContent] = useState(initialDraft?.content ?? "");
   const [contentValue, setContentValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ noteId: string; noteTitle: string } | null>(null);
   const [noteSearch, setNoteSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const pendingNoteAction = useAppStore((s) => s.pendingNoteAction);
+  const clearNoteAction = useAppStore((s) => s.clearNoteAction);
   const [tagFilter, setTagFilter] = useState("");
   // Resizable list↔editor splitter; width persisted across sessions.
   const [listWidth, setListWidth] = useState<number>(() => {
@@ -153,7 +159,23 @@ function NotesWidget() {
   const hasDraft = addingNote && (newNoteTitle.trim() !== "" || newNoteContent.trim() !== "");
   const [pendingLeave, setPendingLeave] = useState<{ noteId?: string } | null>(null);
 
+  // App hotkeys (Ctrl+N / Ctrl+F) arrive as a one-shot request from the store.
+  useEffect(() => {
+    if (!pendingNoteAction) return;
+    if (pendingNoteAction === "new") setAddingNote(true);
+    else searchRef.current?.focus();
+    clearNoteAction();
+  }, [pendingNoteAction]);
+
+  // Debounced autosave while the New Note form is open.
+  useEffect(() => {
+    if (!addingNote) return;
+    const t = setTimeout(() => saveDraft({ title: newNoteTitle, content: newNoteContent }), 600);
+    return () => clearTimeout(t);
+  }, [addingNote, newNoteTitle, newNoteContent]);
+
   const finishLeave = (target: { noteId?: string }) => {
+    clearDraft();
     setAddingNote(false); setNewNoteTitle(""); setNewNoteContent("");
     if (target.noteId) { setActiveNoteId(target.noteId); setHighlightedNoteId(target.noteId); }
   };
@@ -167,6 +189,7 @@ function NotesWidget() {
     const title = newNoteTitle.trim() || "Untitled";
     const content = newNoteContent.trim() || "New note content...";
     await addNote(title, content);
+    clearDraft();
     setNewNoteTitle(""); setNewNoteContent(""); setAddingNote(false);
   };
 
@@ -237,7 +260,7 @@ function NotesWidget() {
               <button onClick={() => setAddingNote(true)} className={`w-full text-xs font-medium ${tw("text-indigo-600 bg-indigo-100/30", "text-indigo-300 bg-indigo-500/20")} hover:bg-indigo-500/30 transition-colors px-2 py-1.5 rounded-lg mb-2`}>
                 + New Note
               </button>
-              <input type="text" value={noteSearch} onChange={(e) => setNoteSearch(e.target.value)} placeholder="Search notes…"
+              <input ref={searchRef} type="text" value={noteSearch} onChange={(e) => setNoteSearch(e.target.value)} placeholder="Search notes…"
                 className={`w-full mb-2 bg-white/5 border ${tw("border-gray-300", "border-white/10")} rounded-lg px-2 py-1 text-[11px] ${tw("text-gray-900", "text-white/90")} placeholder-white/30 outline-none focus:border-indigo-400/60 transition-colors`} />
               {notes.length === 0 && <p className={`${txtMuted} text-xs text-center pt-2`}>No notes.</p>}
               {notes.length > 0 && filteredNotes.length === 0 && <p className={`${txtMuted} text-xs text-center pt-2`}>No match.</p>}

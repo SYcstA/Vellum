@@ -73,6 +73,10 @@ interface AppState {
   toggleSettings: () => void;
 
   openNotesWithHighlight: (noteId: string) => void;
+  /** One-shot request from an app hotkey; NotesWidget consumes it (opens the widget first). */
+  pendingNoteAction: "new" | "search" | null;
+  requestNoteAction: (action: "new" | "search") => void;
+  clearNoteAction: () => void;
   highlightedNoteId: string | null;
   noteSelectionEpoch: number;
 
@@ -282,6 +286,9 @@ export const useAppStore = create<AppState>()(
       /* ─── NON-PERSISTED STATE ─── */
       highlightedNoteId: null,
       noteSelectionEpoch: 0,
+      pendingNoteAction: null,
+      requestNoteAction: (action) => set({ isNotesOpen: true, pendingNoteAction: action }),
+      clearNoteAction: () => set({ pendingNoteAction: null }),
 
       toggleToDo: () => set((s) => ({ isToDoOpen: !s.isToDoOpen })),
       toggleCalendar: () => set((s) => ({ isCalendarOpen: !s.isCalendarOpen })),
