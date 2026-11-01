@@ -3,6 +3,7 @@ import { Rnd } from "react-rnd";
 import { useAppStore } from "../store/useAppStore";
 import { fetchTaskTitlesByDate } from "../store/db";
 import { useLocalToday } from "../utils/date";
+import { lateCompletionDates } from "../utils/taskTiming";
 import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
 import { ChevronLeft, ChevronRight, Check, X, Clock } from "lucide-react";
@@ -33,6 +34,7 @@ function CalendarWidget() {
   const [popup, setPopup] = useState<{
     date: string;
     completions: string[];
+    lates: string[];
     deadlines: string[];
   } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -66,7 +68,7 @@ function CalendarWidget() {
   // (single source of truth) and recompute reactively when tasks OR today change.
   // A deadline is "overdue" using the same rule as the To-Do list: not completed
   // and past today. Completed tasks show only their ✓ (deadline is resolved).
-  const { completionDates, overdueDates, deadlineDates } = useMemo(() => {
+  const { completionDates, lateDates, overdueDates, deadlineDates } = useMemo(() => {
     const completion = new Set<string>();
     const overdue = new Set<string>();
     const deadline = new Set<string>();
@@ -77,7 +79,7 @@ function CalendarWidget() {
         else deadline.add(t.deadlineDate);
       }
     }
-    return { completionDates: completion, overdueDates: overdue, deadlineDates: deadline };
+    return { completionDates: completion, lateDates: lateCompletionDates(tasks, today), overdueDates: overdue, deadlineDates: deadline };
   }, [tasks, today]);
 
   const handleDateClick = async (day: number) => {
@@ -86,8 +88,9 @@ function CalendarWidget() {
     // and show the in-calendar preview popup.
     setActiveDateFilter(dateStr);
     const completions = await fetchTaskTitlesByDate(dateStr, "completion");
+    const lates = await fetchTaskTitlesByDate(dateStr, "late");
     const deadlines = await fetchTaskTitlesByDate(dateStr, "deadline");
-    setPopup({ date: dateStr, completions, deadlines });
+    setPopup({ date: dateStr, completions, lates, deadlines });
   };
 
   const cells: React.ReactNode[] = [];
@@ -99,6 +102,7 @@ function CalendarWidget() {
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const hasCompletion = completionDates.has(dateStr);
+    const hasLate = lateDates.has(dateStr);
     const hasOverdue = overdueDates.has(dateStr);
     const hasDeadline = deadlineDates.has(dateStr);
     const isToday = day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
@@ -121,7 +125,7 @@ function CalendarWidget() {
         </span>
         {(hasCompletion || hasOverdue || hasDeadline) && (
           <div className="flex items-center gap-0.5 mt-0.5 leading-none">
-            {hasCompletion && <Check size={11} strokeWidth={3} className="text-emerald-400" aria-label="Task completed" />}
+            {hasCompletion && <Check size={11} strokeWidth={3} className={hasLate ? "text-orange-400" : "text-emerald-400"} aria-label={hasLate ? "Task finished late" : "Task completed"} />}
             {hasOverdue && <span className="w-1.5 h-1.5 rounded-full bg-red-500" title="Overdue" />}
             {hasDeadline && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Deadline" />}
           </div>
@@ -212,6 +216,10 @@ function CalendarWidget() {
             <span className="text-[10px] text-white/40">Completed</span>
           </div>
           <div className="flex items-center gap-1.5">
+            <Check size={11} strokeWidth={3} className="text-orange-400" />
+            <span className="text-[10px] text-white/40">Finished late</span>
+          </div>
+          <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-amber-400" />
             <span className="text-[10px] text-white/40">Deadline</span>
           </div>
@@ -232,13 +240,21 @@ function CalendarWidget() {
               <span className="text-xs font-mono font-semibold text-white/80">{popup.date}</span>
               <button onClick={() => setPopup(null)} title="Close" className="text-white/40 hover:text-white/80 flex items-center"><X size={13} strokeWidth={2} /></button>
             </div>
-            {popup.completions.length === 0 && popup.deadlines.length === 0 && (
+            {popup.completions.length === 0 && popup.lates.length === 0 && popup.deadlines.length === 0 && (
               <p className="text-white/30 text-xs">No task activity on this date.</p>
             )}
             {popup.completions.length > 0 && (
               <div className="mb-2">
                 <p className="flex items-center gap-1 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider mb-1"><Check size={11} strokeWidth={3} /> Completed</p>
                 {popup.completions.map((t, i) => (
+                  <p key={i} className="text-xs text-white/70 ml-2">• {t}</p>
+                ))}
+              </div>
+            )}
+            {popup.lates.length > 0 && (
+              <div className="mb-2">
+                <p className="flex items-center gap-1 text-[10px] font-semibold text-orange-300 uppercase tracking-wider mb-1"><Check size={11} strokeWidth={3} /> Completed late</p>
+                {popup.lates.map((t, i) => (
                   <p key={i} className="text-xs text-white/70 ml-2">• {t}</p>
                 ))}
               </div>

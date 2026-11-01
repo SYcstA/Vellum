@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import ConfirmModal from "./ConfirmModal";
 import CategoryCombobox from "./CategoryCombobox";
 import DatePicker from "./DatePicker";
+import { taskTiming } from "../utils/taskTiming";
 
 function ToDoWidget() {
   const tasks = useAppStore((s) => s.tasks);
@@ -136,6 +137,7 @@ function ToDoWidget() {
     (!taskQuery || t.text.toLowerCase().includes(taskQuery) || t.tags.some((tg) => tg.toLowerCase().includes(taskQuery)));
   const filteredPending = tasks.filter((t) => !t.completed && matchesFilters(t));
   const filteredCompleted = tasks.filter((t) => t.completed && matchesFilters(t));
+  const lateCount = filteredCompleted.filter((t) => taskTiming(t, todayStr) === "done-late").length;
 
   // Drag-reorder is only valid on the natural pending order (no active filter/
   // search reshuffling the list). Disable the grip when a filter is on.
@@ -155,11 +157,10 @@ function ToDoWidget() {
     drag?: { dragRef?: (el: HTMLElement | null) => void; dragProps?: object; handleProps?: object | null; isDragging?: boolean }
   ) => {
     const isEditing = editingTaskId === task.id;
-    // Overdue = has a deadline, not completed, and the deadline is before today.
-    // String compare is valid for zero-padded YYYY-MM-DD. Reactive via todayStr.
-    const isOverdue = !!task.deadlineDate && !isCompleted && task.deadlineDate < todayStr;
-    // Completed late = finished after its deadline (string compare ok for YYYY-MM-DD).
-    const completedLate = !!task.completionDate && !!task.deadlineDate && task.completionDate > task.deadlineDate;
+    // Reactive via todayStr. `isCompleted` is the list the row sits in.
+    const timing = taskTiming({ ...task, completed: isCompleted }, todayStr);
+    const isOverdue = timing === "overdue";
+    const completedLate = timing === "done-late";
     const linkedNoteCount = noteTaskLinks.filter((l) => l.taskId === task.id).length;
     return (
       <div key={task.id} ref={drag?.dragRef} {...(drag?.dragProps || {})} className={`group flex items-start gap-2 p-2 rounded-lg transition-colors ${drag?.isDragging ? "bg-zinc-800 shadow-xl ring-1 ring-indigo-400/40" : "bg-white/5 hover:bg-white/10"}`}>
@@ -302,6 +303,7 @@ function ToDoWidget() {
                     <button onClick={() => setCompletedExpanded(!completedExpanded)} className="flex items-center gap-2 pt-2 pb-1 w-full text-left transition-colors hover:opacity-80">
                       <motion.span animate={{ rotate: completedExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-white/40 inline-flex"><ChevronRight size={13} strokeWidth={2} /></motion.span>
                       <span className="text-[11px] font-medium text-white/40 uppercase tracking-wider">Completed ({filteredCompleted.length})</span>
+                      {lateCount > 0 && <span className="text-[11px] font-medium text-orange-300 uppercase tracking-wider">· {lateCount} late</span>}
                     </button>
                     {completedExpanded && (
                       <div className="space-y-1.5">

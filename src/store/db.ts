@@ -217,18 +217,27 @@ export async function fetchNoteTaskLinks(): Promise<
   }));
 }
 
-/** Fetch tasks that have a date match (for calendar popover) */
+/**
+ * Fetch tasks that have a date match (for calendar popover).
+ * "completion" = finished on time (or no deadline); "late" = finished after
+ * the deadline, so the two never list the same task.
+ */
 export async function fetchTaskTitlesByDate(
   date: string,
-  type: "completion" | "deadline"
+  type: "completion" | "late" | "deadline"
 ): Promise<string[]> {
   const d = await getDb();
-  const column = type === "completion" ? "Completion_Date" : "Deadline_Date";
+  const column = type === "deadline" ? "Deadline_Date" : "Completion_Date";
   // A completed task's deadline is resolved: it shows under "Completed" only,
   // matching the calendar dots (a done task never also counts as a deadline).
-  const pendingOnly = type === "deadline" ? "AND Status <> 'completed'" : "";
+  const extra =
+    type === "deadline"
+      ? "AND Status <> 'completed'"
+      : type === "late"
+      ? "AND Deadline_Date IS NOT NULL AND Completion_Date > Deadline_Date"
+      : "AND (Deadline_Date IS NULL OR Completion_Date <= Deadline_Date)";
   const rows = await d.select<{ Title: string }[]>(
-    `SELECT Title FROM Tasks WHERE ${column} = ?1 ${pendingOnly}`,
+    `SELECT Title FROM Tasks WHERE ${column} = ?1 ${extra}`,
     [date]
   );
   return rows.map((r) => r.Title);
