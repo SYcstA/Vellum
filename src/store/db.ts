@@ -1,5 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
 import type { Task, Note, LogEntry } from "./useAppStore";
+import type { BackupTables } from "./backup";
 
 let db: Database | null = null;
 
@@ -609,4 +610,68 @@ export async function logAction(
     "INSERT INTO Logs (Action_Type, Detail) VALUES (?1, ?2)",
     [actionType, detail]
   );
+}
+/** Snapshot every table verbatim (IDs included) for a JSON backup. */
+export async function dumpTables(): Promise<BackupTables> {
+  const d = await getDb();
+  const [categories, tasks, taskTags, notes, noteTaskTags, logs] = await Promise.all([
+    d.select<BackupTables["categories"]>("SELECT ID, Name FROM Categories ORDER BY ID"),
+    d.select<BackupTables["tasks"]>(
+      "SELECT ID, Category_ID, Title, Deadline_Date, Completion_Date, Status, Position FROM Tasks ORDER BY ID"
+    ),
+    d.select<BackupTables["taskTags"]>("SELECT Task_ID, Tag_ID FROM Task_Tags ORDER BY Task_ID, Tag_ID"),
+    d.select<BackupTables["notes"]>("SELECT ID, Title, Content, Position FROM Notes ORDER BY ID"),
+    d.select<BackupTables["noteTaskTags"]>(
+      "SELECT Note_ID, Task_ID FROM Note_Task_Tags ORDER BY Note_ID, Task_ID"
+    ),
+    d.select<BackupTables["logs"]>(
+      "SELECT Timestamp, Action_Type, Detail, Entity_Type, Entity_ID FROM Logs ORDER BY ID"
+    ),
+  ]);
+  return { categories, tasks, taskTags, notes, noteTaskTags, logs };
+}
+
+/**
+ * Replace ALL data with a backup, keeping IDs so links stay valid.
+ * Caller must have run `parseBackup` first (nothing is validated here) and
+ * should have exported the current data: this is NOT atomic (see the
+ * atomicity caveat in useAppStore.ts), so a mid-way failure leaves a
+ * partial DB that only that pre-import export can repair.
+ */
+export async function replaceAllTables(b: BackupTables): Promise<void> {
+  const d = await getDb();
+  for (const t of ["Note_Task_Tags", "Task_Tags", "Logs", "Notes", "Tasks", "Categories"]) {
+    await d.execute(`DELETE FROM ${t}`);
+  }
+  // Reset AUTOINCREMENT counters; the explicit-ID inserts below re-seed them
+  // to each table's max ID, so rows added after import never collide.
+  try { await d.execute("DELETE FROM sqlite_sequence"); } catch {}
+
+  for (const c of b.categories) {
+    await d.execute("INSERT INTO Categories (ID, Name) VALUES (?1, ?2)", [c.ID, c.Name]);
+  }
+  for (const t of b.tasks) {
+    await d.execute(
+      "INSERT INTO Tasks (ID, Category_ID, Title, Deadline_Date, Completion_Date, Status, Position) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+      [t.ID, t.Category_ID, t.Title, t.Deadline_Date, t.Completion_Date, t.Status, t.Position]
+    );
+  }
+  for (const r of b.taskTags) {
+    await d.execute("INSERT INTO Task_Tags (Task_ID, Tag_ID) VALUES (?1, ?2)", [r.Task_ID, r.Tag_ID]);
+  }
+  for (const n of b.notes) {
+    await d.execute(
+      "INSERT INTO Notes (ID, Title, Content, Position) VALUES (?1, ?2, ?3, ?4)",
+      [n.ID, n.Title, n.Content, n.Position]
+    );
+  }
+  for (const r of b.noteTaskTags) {
+    await d.execute("INSERT INTO Note_Task_Tags (Note_ID, Task_ID) VALUES (?1, ?2)", [r.Note_ID, r.Task_ID]);
+  }
+  for (const l of b.logs) {
+    await d.execute(
+      "INSERT INTO Logs (Timestamp, Action_Type, Detail, Entity_Type, Entity_ID) VALUES (?1, ?2, ?3, ?4, ?5)",
+      [l.Timestamp, l.Action_Type, l.Detail, l.Entity_Type, l.Entity_ID]
+    );
+  }
 }

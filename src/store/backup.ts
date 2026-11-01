@@ -123,6 +123,12 @@ export function parseBackup(json: string): BackupV1 {
   const tasks = idSet("tasks");
   const notes = idSet("notes");
 
+  const names = new Set<string>();
+  for (const c of b.categories) {
+    if (names.has(c.Name)) fail(`categories has duplicate Name "${c.Name}".`);
+    names.add(c.Name);
+  }
+
   b.tasks.forEach((t, i) => {
     if (!cats.has(t.Category_ID)) fail(`tasks[${i}].Category_ID ${t.Category_ID} does not exist in categories.`);
   });
@@ -134,6 +140,17 @@ export function parseBackup(json: string): BackupV1 {
     if (!notes.has(r.Note_ID)) fail(`noteTaskTags[${i}].Note_ID ${r.Note_ID} does not exist in notes.`);
     if (!tasks.has(r.Task_ID)) fail(`noteTaskTags[${i}].Task_ID ${r.Task_ID} does not exist in tasks.`);
   });
+
+  const noDupPairs = (table: "taskTags" | "noteTaskTags", a: string, c: string) => {
+    const seen = new Set<string>();
+    (b[table] as Record<string, number>[]).forEach((r, i) => {
+      const key = `${r[a]}:${r[c]}`;
+      if (seen.has(key)) fail(`${table}[${i}] is a duplicate (${a} ${r[a]}, ${c} ${r[c]}).`);
+      seen.add(key);
+    });
+  };
+  noDupPairs("taskTags", "Task_ID", "Tag_ID");
+  noDupPairs("noteTaskTags", "Note_ID", "Task_ID");
 
   return b;
 }

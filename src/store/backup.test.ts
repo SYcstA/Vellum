@@ -90,6 +90,18 @@ describe("parseBackup rejects bad input", () => {
     expect(() => parseBackup(tampered((o) => { o.categories[1].ID = 1; }))).toThrow(/categories/);
   });
 
+  it("rejects duplicate category names (DB column is UNIQUE)", () => {
+    expect(() => parseBackup(tampered((o) => { o.categories[1].Name = "Work"; }))).toThrow(/categories.*Name/);
+  });
+
+  it("rejects a duplicated taskTags pair (DB primary key)", () => {
+    expect(() => parseBackup(tampered((o) => { o.taskTags.push({ ...o.taskTags[0] }); }))).toThrow(/taskTags.*duplicate/);
+  });
+
+  it("rejects a duplicated noteTaskTags pair (DB primary key)", () => {
+    expect(() => parseBackup(tampered((o) => { o.noteTaskTags.push({ ...o.noteTaskTags[0] }); }))).toThrow(/noteTaskTags.*duplicate/);
+  });
+
   it("rejects a task whose Category_ID does not exist", () => {
     expect(() => parseBackup(tampered((o) => { o.tasks[0].Category_ID = 99; }))).toThrow(/Category_ID/);
   });
