@@ -9,6 +9,7 @@ import { glassStyle } from "../utils/glass";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
 import { X, Check, Trash2 } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
+import { parseTimePart } from "../utils/timePart";
 import { exportBackup, pickBackup, applyBackup } from "../store/backupIO";
 import type { BackupV1 } from "../store/backup";
 import { acceleratorFromEvent, describeShortcut, DEFAULT_GHOST_SHORTCUT, DEFAULT_NOTE_NEW_KEY, DEFAULT_NOTE_SEARCH_KEY } from "../utils/shortcut";
@@ -78,30 +79,42 @@ function ShortcutRow({ label, hint, value, defaultValue, apply, isLight }: {
 }
 
 /**
- * Hour + minute pickers, always 24 h (a native <input type="time"> follows the
- * Windows locale). Minutes go in steps of 5; a saved odd value stays selectable.
- * `colorScheme` makes the native popup follow the widget theme (otherwise it is
- * white-on-white in dark mode).
+ * Typed 24-hour time ("HH" : "mm"). A native <input type="time"> follows the
+ * Windows locale (12 h), so this is two small number boxes. Commits on blur or
+ * Enter; anything invalid snaps back to the saved value.
  */
+function TimePartInput({ value, max, label, disabled, onCommit, cls }: {
+  value: string; max: number; label: string; disabled: boolean; onCommit: (v: string) => void; cls: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    const ok = parseTimePart(draft, max);
+    if (ok) onCommit(ok);
+    else setDraft(value);
+  };
+  return (
+    <input
+      value={draft} disabled={disabled} inputMode="numeric" maxLength={2} aria-label={label}
+      onChange={(e) => setDraft(e.target.value.replace(/\D/g, ""))}
+      onBlur={commit}
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      className={`${cls} w-9 text-center`}
+    />
+  );
+}
+
 function TimeSelect24({ value, disabled, onChange, isLight }: {
   value: string; disabled: boolean; onChange: (hhmm: string) => void; isLight: boolean;
 }) {
   const [h, m] = value.split(":");
-  const cls = `text-xs font-mono px-1.5 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-zinc-900 text-white/80 border-white/10"}`;
-  const two = (n: number) => String(n).padStart(2, "0");
-  const minutes = Array.from({ length: 12 }, (_, i) => two(i * 5));
-  if (!minutes.includes(m)) minutes.push(m);
-  minutes.sort();
-  const scheme = { colorScheme: isLight ? "light" : "dark" } as const;
+  const cls = `text-xs font-mono px-1 py-2 rounded-lg border outline-none disabled:opacity-40 ${isLight ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-white/5 text-white/80 border-white/10"}`;
   return (
-    <div className="flex items-center gap-1" title="Reminder time (24-hour)">
-      <select value={h} disabled={disabled} onChange={(e) => onChange(`${e.target.value}:${m}`)} className={cls} style={scheme} aria-label="Hour">
-        {Array.from({ length: 24 }, (_, i) => <option key={i} value={two(i)}>{two(i)}</option>)}
-      </select>
+    <div className="flex items-center gap-1" title="Reminder time, 24-hour. Type the hour and minute.">
+      <TimePartInput value={h} max={23} label="Hour" disabled={disabled} onCommit={(v) => onChange(`${v}:${m}`)} cls={cls} />
       <span className={isLight ? "text-gray-500" : "text-white/40"}>:</span>
-      <select value={m} disabled={disabled} onChange={(e) => onChange(`${h}:${e.target.value}`)} className={cls} style={scheme} aria-label="Minute">
-        {minutes.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
-      </select>
+      <TimePartInput value={m} max={59} label="Minute" disabled={disabled} onCommit={(v) => onChange(`${h}:${v}`)} cls={cls} />
     </div>
   );
 }

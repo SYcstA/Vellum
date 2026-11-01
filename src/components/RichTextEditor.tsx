@@ -1,4 +1,5 @@
 import { Editor } from "@tinymce/tinymce-react";
+import { linkEndingAtCaret } from "../utils/linkCaret";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 // Self-hosted TinyMCE (offline, no CDN / API key).
@@ -91,12 +92,23 @@ export default function RichTextEditor({ value, onChange, dark }: Props) {
         // 'https' prefixes silently; `true` pops a "add https:// prefix?" dialog.
         link_assume_external_targets: "https",
         // Right-click a link -> Link… / Open link / Remove link.
-        contextmenu: "link",
+        contextmenu: "vellumlink",
         default_link_target: "_blank",
         // Show quick toolbar (URL + edit/remove) when cursor lands on a link
         link_context_toolbar: true,
 
         setup: (editor) => {
+          // Right-click on a link: Edit link… / Open link / Remove link. (The
+          // stock "link" menu only says "Link…", which reads as "insert".)
+          editor.ui.registry.addMenuItem("vellumeditlink", {
+            icon: "edit-block",
+            text: "Edit link…",
+            onAction: () => { editor.execCommand("mceLink"); },
+          });
+          editor.ui.registry.addContextMenu("vellumlink", {
+            update: (element) => (editor.dom.getParent(element, "a[href]") ? "vellumeditlink openlink unlink" : ""),
+          });
+
           // Override window.open inside the TinyMCE iframe so every "open link"
           // action (context toolbar button, keyboard shortcut, etc.) routes
           // through Tauri's shell opener instead of the sandboxed WebView.
@@ -114,14 +126,35 @@ export default function RichTextEditor({ value, onChange, dark }: Props) {
           });
 
           // A plain click on a link opens it in the default browser / app.
-          // (Edit a link via the toolbar Link button or Ctrl+K with the cursor
-          // placed on it using the keyboard.)
+          // (Edit a link via right-click -> Link, the toolbar Link button, or Ctrl+K
+          // with the cursor placed on it using the keyboard.)
           editor.on("click", (e) => {
             const a = (e.target as HTMLElement).closest?.("a[href]") as HTMLAnchorElement | null;
             if (!a) return;
             e.preventDefault();
             const href = a.getAttribute("href");
             if (href && /^(https?:|mailto:)/i.test(href)) openUrl(href).catch((err) => console.error("openUrl failed:", err));
+          });
+
+          // Typing at the very end of a link must NOT grow the link (it would swallow
+          // the rest of the sentence). Put the typed character in a plain text node
+          // right after it. Edit a link via right-click -> Link, or Ctrl+K.
+          editor.on("keydown", (e) => {
+            if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+            const a = linkEndingAtCaret(editor.selection.getRng());
+            if (!a) return;
+            e.preventDefault();
+            const doc = a.ownerDocument;
+            const text = doc.createTextNode(e.key);
+            editor.undoManager.transact(() => {
+              a.after(text);
+              const r = doc.createRange();
+              r.setStart(text, text.length);
+              r.collapse(true);
+              editor.selection.setRng(r);
+            });
+            editor.nodeChanged();
+            editor.dispatch("input"); // lets the React wrapper report the new content
           });
 
           // Recognise YouTube / YouTube Music / Spotify links and badge them.
