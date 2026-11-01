@@ -591,6 +591,9 @@ export async function factoryReset(): Promise<void> {
   // Re-trigger onboarding (95% centered window + default widget layout) on the
   // NEXT launch — user explicitly asked for a full re-init after factory reset.
   localStorage.removeItem("vellum_first_open");
+  // Draft text and the reminder marker belong to the data being deleted.
+  localStorage.removeItem("vellum_note_draft");
+  localStorage.removeItem("vellum_last_reminder");
   localStorage.removeItem("is_fake_maximized");
 }
 

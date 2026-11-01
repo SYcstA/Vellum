@@ -168,6 +168,15 @@ function NotesWidget() {
     clearNoteAction();
   }, [pendingNoteAction]);
 
+  // The debounce below is cancelled when the widget closes; flush once on unmount
+  // so the last keystrokes survive. (After Save/Discard addingNote is false: no-op.)
+  const draftRef = useRef({ adding: addingNote, title: newNoteTitle, content: newNoteContent });
+  draftRef.current = { adding: addingNote, title: newNoteTitle, content: newNoteContent };
+  useEffect(() => () => {
+    const d = draftRef.current;
+    if (d.adding) saveDraft({ title: d.title, content: d.content });
+  }, []);
+
   // Debounced autosave while the New Note form is open.
   useEffect(() => {
     if (!addingNote) return;
@@ -189,7 +198,8 @@ function NotesWidget() {
   const handleAddNote = async () => {
     const title = newNoteTitle.trim() || "Untitled";
     const content = newNoteContent.trim() || "New note content...";
-    await addNote(title, content);
+    // A failed save keeps the form and the autosaved draft: nothing is lost.
+    if (!(await addNote(title, content))) return;
     clearDraft();
     setNewNoteTitle(""); setNewNoteContent(""); setAddingNote(false);
   };

@@ -46,3 +46,17 @@ describe("matchHotkey with specs saved from the rebind UI", () => {
     expect(matchHotkey(ev({ key: "F5", altKey: true }), "Alt+F5")).toBe(true);
   });
 });
+
+describe("matchHotkey uses the physical key when the event has a code", () => {
+  it("matches Ctrl+Shift+1 although the event key is '!'", () => {
+    expect(matchHotkey(ev({ key: "!", code: "Digit1", ctrlKey: true, shiftKey: true }), "Control+Shift+1")).toBe(true);
+  });
+
+  it("matches Ctrl+Alt+N when AltGr changes the event key", () => {
+    expect(matchHotkey(ev({ key: "ń", code: "KeyN", ctrlKey: true, altKey: true }), "Control+Alt+N")).toBe(true);
+  });
+
+  it("does not fire when the Win key is also held", () => {
+    expect(matchHotkey(ev({ key: "n", code: "KeyN", ctrlKey: true, metaKey: true }), "Ctrl+N")).toBe(false);
+  });
+});

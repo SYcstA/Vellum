@@ -123,6 +123,17 @@ export function parseBackup(json: string): BackupV1 {
   const tasks = idSet("tasks");
   const notes = idSet("notes");
 
+  const isoDay = /^\d{4}-\d{2}-\d{2}$/;
+  b.tasks.forEach((t, i) => {
+    if (t.Status !== "pending" && t.Status !== "completed") {
+      fail(`tasks[${i}].Status "${t.Status}" must be "pending" or "completed".`);
+    }
+    for (const col of ["Deadline_Date", "Completion_Date"] as const) {
+      const v = t[col];
+      if (v !== null && !isoDay.test(v)) fail(`tasks[${i}].${col} "${v}" must look like YYYY-MM-DD.`);
+    }
+  });
+
   const names = new Set<string>();
   for (const c of b.categories) {
     if (names.has(c.Name)) fail(`categories has duplicate Name "${c.Name}".`);

@@ -42,6 +42,7 @@ function ShortcutRow({ label, hint, value, defaultValue, apply, isLight }: {
   // the held modifiers live so the user sees what is being captured.
   const capture = async (e: React.KeyboardEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // keep the window-level app hotkeys from also firing
     if (e.key === "Escape") { setCapturing(false); setPreview(""); setError(""); return; }
     const r = acceleratorFromEvent(e.nativeEvent);
     setPreview(r.preview);
@@ -201,10 +202,12 @@ function SettingsWidget() {
       const safetyPath = await applyBackup(backup);
       await loadData();
       await refreshLogs();
+      // IDs changed: drop selections/filters that may point at rows that no longer exist.
+      useAppStore.setState({ highlightedNoteId: null, activeCategoryFilter: "", activeDateFilter: "" });
       setBackupMsg({ ok: true, text: `Imported. Previous data saved to ${safetyPath}` });
     } catch (err) {
       setBackupMsg({ ok: false, text: `Import failed: ${String(err)}. Data may be incomplete; restore from the backups folder in the app data directory.` });
-      await loadData();
+      try { await loadData(); } catch { /* already reported above */ }
     } finally {
       setBackupBusy(false);
     }

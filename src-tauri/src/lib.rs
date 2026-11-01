@@ -22,21 +22,26 @@ pub fn run() {
     // Ghost Mode whenever the registered combo is pressed.
     let ghost_default = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyG);
 
-    tauri::Builder::default()
-        // Must be the FIRST plugin. A second launch exits immediately and hands
-        // off to the running instance, which is brought to the front instead.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-                if let Some(toggle_mi) = app.try_state::<ToggleMenuItem>() {
-                    if let Ok(toggle) = toggle_mi.0.lock() {
-                        let _ = toggle.set_text("Hide Dashboard");
-                    }
+    let builder = tauri::Builder::default();
+    // Must be the FIRST plugin. A second launch exits immediately and hands
+    // off to the running instance, which is brought to the front instead.
+    // Release builds only: a dev build shares the installed app's identifier,
+    // so with this plugin `tauri dev` would just focus the installed app.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+            if let Some(toggle_mi) = app.try_state::<ToggleMenuItem>() {
+                if let Ok(toggle) = toggle_mi.0.lock() {
+                    let _ = toggle.set_text("Hide Dashboard");
                 }
             }
-        }))
+        }
+    }));
+
+    builder
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -245,7 +250,9 @@ fn set_ghost_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), 
     let old = app
         .try_state::<GhostShortcut>()
         .and_then(|s| s.0.lock().ok().and_then(|g| g.clone()));
-    if old.as_ref() == Some(&sc) {
+    // Only skip when the combo is really registered: if startup registration
+    // failed (another app held it) the stored value is stale and must be retried.
+    if old.as_ref() == Some(&sc) && app.global_shortcut().is_registered(sc.clone()) {
         return Ok(());
     }
     if let Some(o) = &old {

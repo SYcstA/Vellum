@@ -141,7 +141,8 @@ interface AppState {
   /* Deletion & Creation */
   deleteTaskById: (taskId: string) => Promise<void>;
   deleteNoteById: (noteId: string) => Promise<void>;
-  addNote: (title: string, content: string) => Promise<void>;
+  /** Resolves true once the note is in the database, false if the save failed. */
+  addNote: (title: string, content: string) => Promise<boolean>;
   resetAllData: () => Promise<void>;
 
   /* Tagging */
@@ -508,7 +509,14 @@ export const useAppStore = create<AppState>()(
         const maxId = state.notes.reduce((max, n) => Math.max(max, numericNoteId(n.id)), 0);
         const tempId = `n${maxId + 1}`;
         set({ notes: [...state.notes, { id: tempId, title, text: content }] });
-        try { const result = await createNoteDb(title, content); set((s) => ({ notes: s.notes.map((n) => (n.id === tempId ? { ...n, id: `n${result.noteId}` } : n)) })); } catch (err) { set((s) => ({ notes: s.notes.filter((n) => n.id !== tempId) })); }
+        try {
+          const result = await createNoteDb(title, content);
+          set((s) => ({ notes: s.notes.map((n) => (n.id === tempId ? { ...n, id: `n${result.noteId}` } : n)) }));
+          return true;
+        } catch (err) {
+          set((s) => ({ notes: s.notes.filter((n) => n.id !== tempId) }));
+          return false;
+        }
       },
 
       resetAllData: async () => {

@@ -90,6 +90,18 @@ describe("parseBackup rejects bad input", () => {
     expect(() => parseBackup(tampered((o) => { o.categories[1].ID = 1; }))).toThrow(/categories/);
   });
 
+  it("rejects an unknown task Status", () => {
+    expect(() => parseBackup(tampered((o) => { o.tasks[0].Status = "done"; }))).toThrow(/Status/);
+  });
+
+  it("rejects a deadline that is not YYYY-MM-DD", () => {
+    expect(() => parseBackup(tampered((o) => { o.tasks[0].Deadline_Date = "2026-1-5"; }))).toThrow(/Deadline_Date/);
+  });
+
+  it("rejects a completion date that is not YYYY-MM-DD", () => {
+    expect(() => parseBackup(tampered((o) => { o.tasks[1].Completion_Date = "yesterday"; }))).toThrow(/Completion_Date/);
+  });
+
   it("rejects duplicate category names (DB column is UNIQUE)", () => {
     expect(() => parseBackup(tampered((o) => { o.categories[1].Name = "Work"; }))).toThrow(/categories.*Name/);
   });
