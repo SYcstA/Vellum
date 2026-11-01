@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useCallback } from "react";
 import { Rnd } from "react-rnd";
 import { useAppStore } from "../store/useAppStore";
 import { glassStyle } from "../utils/glass";
@@ -6,7 +6,8 @@ import { noteContentToHtml, stripHtml } from "../utils/notes";
 import { clampWidgetPosition, useWidgetBoundaryClamp } from "../utils/window";
 import { Check, X } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
-import RichTextEditor from "./RichTextEditor";
+// TinyMCE is ~1.4 MB: load it only when a note is first opened.
+const RichTextEditor = lazy(() => import("./RichTextEditor"));
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { createPortal } from "react-dom";
 import { loadDraft, saveDraft, clearDraft } from "../utils/draft";
@@ -323,7 +324,9 @@ function NotesWidget() {
                     )}
                   </div>
                   <div className="flex-1 overflow-hidden p-3">
-                    <RichTextEditor value={contentValue} onChange={handleContentChange} dark={!isLight} />
+                    <Suspense fallback={<div className={`w-full h-full flex items-center justify-center text-xs ${txtBody3}`}>Loading editor…</div>}>
+                      <RichTextEditor value={contentValue} onChange={handleContentChange} dark={!isLight} />
+                    </Suspense>
                   </div>
                   <div className={`px-3 pb-3 pt-1 border-t ${tw("border-gray-200", "border-white/5")}`}>
                     <details className="group">

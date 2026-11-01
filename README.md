@@ -15,7 +15,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Rust](https://img.shields.io/badge/Rust-1.0-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Zustand](https://img.shields.io/badge/Zustand-5-433E38?style=for-the-badge&logo=react&logoColor=white)](https://github.com/pmndrs/zustand)
-[![Version](https://img.shields.io/badge/version-0.2.0-6366f1?style=for-the-badge)](https://github.com/SYcstA/Vellum/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-6366f1?style=for-the-badge)](https://github.com/SYcstA/Vellum/releases)
 
 </div>
 
@@ -35,6 +35,32 @@ Built on **Tauri 2** (a native Rust shell + a React/TypeScript frontend), Vellum
 *The Vellum dashboard — frameless, centered, glass.*
 
 </div>
+
+---
+
+## What's New in v0.3.0
+
+### Backup & Restore
+**Settings → Backup** exports everything (tasks, notes, tags, links, activity log) to a single `.json` file and imports it back. Importing validates the whole file first, shows what it contains, saves a safety copy of your current data to `%APPDATA%\com.osvaldo.vellum\backups\`, and only then replaces your data.
+
+### Quick Capture
+Press **Ctrl + Alt + N** from any app to open a small always-on-top box. Type a task and press Enter (it lands in an **Inbox** tag), or start with `n:` to save a note instead. The dashboard updates live. The hotkey can be changed in Settings.
+
+### Deadline Reminder
+Turn on **Settings → Deadline Reminder** for one daily notification listing tasks due today or past due, at a time you choose, or when you open Vellum later in the day. Works while Vellum is running (pair it with *Launch on System Startup*).
+
+### Never Lose a Draft
+An unsaved **New Note** is autosaved and comes back after closing the widget or restarting. **Ctrl + N** opens a new note anywhere; **Ctrl + F** jumps to note search.
+
+### Finished Late
+A task completed after its deadline keeps a small orange mark; the Calendar shows those days with an orange tick and lists them under *Completed late*.
+
+### Polish & Fixes
+- Ghost Mode hotkey is now **Ctrl + Alt + G** (the old Alt + G is migrated automatically); rebinding uses the physical key and keeps your old hotkey if the new one is taken.
+- Launching Vellum twice focuses the running window instead of opening a second copy.
+- Links in notes open in your browser on click; right-click for Link / Open / Remove. YouTube, YouTube Music and Spotify links get a badge.
+- The rich-text editor loads only when you open a note, so the app starts with a much smaller bundle.
+- Fixed: wrong text colour after switching themes, unreadable dialogs in dark mode, completed tasks appearing twice in the calendar popup.
 
 ---
 
@@ -101,7 +127,7 @@ Flip a single toggle in Settings to launch Vellum silently in the background on 
 
 ## Installation
 
-1. Head to the [**Releases page**](https://github.com/SYcstA/Vellum/releases) and grab the latest `Vellum_0.2.0_x64-setup.exe`.
+1. Head to the [**Releases page**](https://github.com/SYcstA/Vellum/releases) and grab the latest `Vellum_0.3.0_x64-setup.exe`.
 2. Run the installer (NSIS, published by **YcstA**).
 3. Launch Vellum from the Start menu or pin it to the taskbar.
 
@@ -121,7 +147,7 @@ npm install
 npm run tauri dev
 
 # Build a production installer (.exe + NSIS bundle)
-# Output: src-tauri/target/release/bundle/nsis/Vellum_0.2.0_x64-setup.exe
+# Output: src-tauri/target/release/bundle/nsis/Vellum_0.3.0_x64-setup.exe
 npm run tauri build
 ```
 
