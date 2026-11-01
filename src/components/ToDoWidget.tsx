@@ -137,7 +137,6 @@ function ToDoWidget() {
     (!taskQuery || t.text.toLowerCase().includes(taskQuery) || t.tags.some((tg) => tg.toLowerCase().includes(taskQuery)));
   const filteredPending = tasks.filter((t) => !t.completed && matchesFilters(t));
   const filteredCompleted = tasks.filter((t) => t.completed && matchesFilters(t));
-  const lateCount = filteredCompleted.filter((t) => taskTiming(t, todayStr) === "done-late").length;
 
   // Drag-reorder is only valid on the natural pending order (no active filter/
   // search reshuffling the list). Disable the grip when a filter is on.
@@ -303,7 +302,6 @@ function ToDoWidget() {
                     <button onClick={() => setCompletedExpanded(!completedExpanded)} className="flex items-center gap-2 pt-2 pb-1 w-full text-left transition-colors hover:opacity-80">
                       <motion.span animate={{ rotate: completedExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-white/40 inline-flex"><ChevronRight size={13} strokeWidth={2} /></motion.span>
                       <span className="text-[11px] font-medium text-white/40 uppercase tracking-wider">Completed ({filteredCompleted.length})</span>
-                      {lateCount > 0 && <span className="text-[11px] font-medium text-orange-300 uppercase tracking-wider">· {lateCount} late</span>}
                     </button>
                     {completedExpanded && (
                       <div className="space-y-1.5">
