@@ -50,7 +50,7 @@ Built on **Tauri 2** (a native Rust shell + a React/TypeScript frontend), Vellum
 Turn on **Settings → Deadline Reminder** for one daily notification at a time you type in (24-hour clock). It lists open tasks that are overdue or due today, plus anything due within the next *N* days (you choose *N*, `0` = only today and overdue). Any task can also get its own **Remind on** date in the task editor (past days can't be picked). Opening Vellum after the set time still shows the day's notification once. Enable **Also remind when Vellum is closed** and a Windows scheduled task wakes Vellum in the background at that time, even after Quit.
 
 ### Never Lose a Draft
-An unsaved **New Note** is autosaved and comes back after closing the widget or restarting. With Notes open, **Ctrl + N** starts a new note and **Ctrl + F** jumps to note search (both rebindable).
+An unsaved **New Note** is autosaved and comes back after closing the widget or restarting. With Notes open, **Ctrl + N** starts a new note and **Ctrl + F** jumps to note search (both rebindable). While your caret is inside the note text, Ctrl + N still works, but **Ctrl + F opens Find & Replace for that note** instead; click outside the text first to reach note search.
 
 ### Finished Late
 A task completed after its deadline keeps a small orange mark. The Calendar keeps the green tick and adds a small orange dot on those days; clicking the day lists them under *Completed late* together with the date they were due.

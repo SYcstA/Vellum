@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchHotkey } from "./hotkeys";
+import { matchHotkey, runHotkey } from "./hotkeys";
 
 const ev = (over: Partial<Parameters<typeof matchHotkey>[0]>) => ({
   key: "", ctrlKey: false, shiftKey: false, altKey: false, ...over,
@@ -44,6 +44,36 @@ describe("matchHotkey with specs saved from the rebind UI", () => {
 
   it("matches F-keys", () => {
     expect(matchHotkey(ev({ key: "F5", altKey: true }), "Alt+F5")).toBe(true);
+  });
+});
+
+describe("runHotkey", () => {
+  it("runs the handler of the matching spec and reports it handled", () => {
+    const calls: string[] = [];
+    const map = { "Ctrl+N": () => calls.push("new"), "Ctrl+F": () => calls.push("search") };
+    expect(runHotkey(ev({ key: "n", ctrlKey: true }), map)).toBe(true);
+    expect(calls).toEqual(["new"]);
+  });
+
+  it("reports not handled (and runs nothing) when no spec matches", () => {
+    const calls: string[] = [];
+    const map = { "Ctrl+N": () => calls.push("new") };
+    expect(runHotkey(ev({ key: "x", ctrlKey: true }), map)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves excepted combos alone even when a spec matches (Ctrl+F stays Find & Replace in the editor)", () => {
+    const calls: string[] = [];
+    const map = { "Ctrl+F": () => calls.push("search") };
+    expect(runHotkey(ev({ key: "f", ctrlKey: true }), map, ["Ctrl+F"])).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it("still runs other specs when something else is excepted", () => {
+    const calls: string[] = [];
+    const map = { "Ctrl+N": () => calls.push("new") };
+    expect(runHotkey(ev({ key: "n", ctrlKey: true }), map, ["Ctrl+F"])).toBe(true);
+    expect(calls).toEqual(["new"]);
   });
 });
 

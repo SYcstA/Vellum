@@ -1,5 +1,6 @@
 import { Editor } from "@tinymce/tinymce-react";
 import { linkEndingAtCaret } from "../utils/linkCaret";
+import { runAppHotkeyFromEditor } from "../utils/hotkeys";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 // Self-hosted TinyMCE (offline, no CDN / API key).
@@ -134,6 +135,12 @@ export default function RichTextEditor({ value, onChange, dark }: Props) {
             e.preventDefault();
             const href = a.getAttribute("href");
             if (href && /^(https?:|mailto:)/i.test(href)) openUrl(href).catch((err) => console.error("openUrl failed:", err));
+          });
+
+          // Key presses in this iframe never reach the window, so forward the app
+          // hotkeys (New note, ...) ourselves. Ctrl+F stays TinyMCE's Find & Replace.
+          editor.on("keydown", (e) => {
+            if (runAppHotkeyFromEditor(e)) e.preventDefault();
           });
 
           // Typing at the very end of a link must NOT grow the link (it would swallow

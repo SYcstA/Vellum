@@ -37,24 +37,56 @@ export function matchHotkey(
   );
 }
 
+type KeyEv = Parameters<typeof matchHotkey>[0];
+
+/**
+ * Run the handler whose spec matches the keydown. Returns true when one ran.
+ * Combos in `except` are never handled (left to whoever else wants them).
+ */
+export function runHotkey(e: KeyEv, map: Record<string, () => void>, except: string[] = []): boolean {
+  if (except.some((spec) => matchHotkey(e, spec))) return false;
+  for (const [spec, fn] of Object.entries(map)) {
+    if (matchHotkey(e, spec)) {
+      fn();
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The handlers currently registered by useAppHotkeys (for the editor iframe). */
+let activeMap: Record<string, () => void> | null = null;
+
+/** Combos the note editor keeps for itself: Ctrl+F opens TinyMCE's Find & Replace. */
+const EDITOR_KEEPS = ["Ctrl+F"];
+
+/**
+ * Called from the TinyMCE iframe, whose key presses never reach the window
+ * listener. Runs the app hotkey (e.g. New note) and returns true if one ran, so
+ * the caller can preventDefault.
+ */
+export function runAppHotkeyFromEditor(e: KeyEv): boolean {
+  return activeMap ? runHotkey(e, activeMap, EDITOR_KEEPS) : false;
+}
+
 /**
  * App-wide in-window hotkeys (not global OS shortcuts). Key presses inside the
- * TinyMCE iframe never reach this window listener, so they are naturally ignored.
+ * TinyMCE iframe do not reach this window listener; the editor forwards them
+ * through runAppHotkeyFromEditor.
  */
 export function useAppHotkeys(map: Record<string, () => void>): void {
   const ref = useRef(map);
   ref.current = map;
+  activeMap = map;
   useEffect(() => {
+    activeMap = ref.current; // re-arm after a StrictMode mount/cleanup/mount cycle
     const onKey = (e: KeyboardEvent) => {
-      for (const [spec, fn] of Object.entries(ref.current)) {
-        if (matchHotkey(e, spec)) {
-          e.preventDefault();
-          fn();
-          return;
-        }
-      }
+      if (runHotkey(e, ref.current)) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      activeMap = null;
+    };
   }, []);
 }
