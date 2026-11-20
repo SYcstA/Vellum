@@ -123,7 +123,7 @@ pub fn run() {
             app.manage(GhostState(Mutex::new(false)));
             app.manage(ReminderLaunch(std::env::args().any(|a| a == "--reminder")));
             app.manage(ReminderExitCancelled(AtomicBool::new(false)));
-            app.manage(GhostShortcut(Mutex::new(Some(ghost_default.clone()))));
+            app.manage(GhostShortcut(Mutex::new(Some(ghost_default))));
 
             // Clear any zombie registrations from hot-reloads, then register the
             // default Ghost-Mode hotkey. The frontend re-applies the user's saved
@@ -286,16 +286,16 @@ fn set_ghost_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), 
         .map_err(|e| format!("invalid shortcut '{accelerator}': {e:?}"))?;
     let old = app
         .try_state::<GhostShortcut>()
-        .and_then(|s| s.0.lock().ok().and_then(|g| g.clone()));
+        .and_then(|s| s.0.lock().ok().and_then(|g| *g));
     // Only skip when the combo is really registered: if startup registration
     // failed (another app held it) the stored value is stale and must be retried.
-    if old.as_ref() == Some(&sc) && app.global_shortcut().is_registered(sc.clone()) {
+    if old.as_ref() == Some(&sc) && app.global_shortcut().is_registered(sc) {
         return Ok(());
     }
     if let Some(o) = &old {
-        let _ = app.global_shortcut().unregister(o.clone());
+        let _ = app.global_shortcut().unregister(*o);
     }
-    if let Err(e) = app.global_shortcut().register(sc.clone()) {
+    if let Err(e) = app.global_shortcut().register(sc) {
         // Keep the previous hotkey alive so a failed rebind never leaves the
         // user without a way to leave Ghost Mode.
         if let Some(o) = old {
@@ -325,8 +325,8 @@ fn valid_hhmm(t: &str) -> bool {
     t.is_ascii()
         && b.len() == 5
         && b[2] == b':'
-        && t[..2].parse::<u8>().map_or(false, |h| h < 24)
-        && t[3..].parse::<u8>().map_or(false, |m| m < 60)
+        && t[..2].parse::<u8>().is_ok_and(|h| h < 24)
+        && t[3..].parse::<u8>().is_ok_and(|m| m < 60)
 }
 
 /// Create/replace (enabled) or delete (disabled) a per-user Windows scheduled
