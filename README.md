@@ -104,7 +104,7 @@ Independently draggable, resizable widgets for **To-Do**, **Notes**, **Calendar*
 </div>
 
 ### Ghost Mode (Escape Hatch)
-Need to click *through* Vellum to interact with the desktop underneath? Toggle **Ghost Mode** from the title bar. The window becomes fully click-through — perfect for keeping a checklist visible while you work in another app. Press your configured shortcut (default **`Alt + G`**) at any time to instantly restore interactivity.
+Need to click *through* Vellum to interact with the desktop underneath? Toggle **Ghost Mode** from the title bar. The window becomes fully click-through — perfect for keeping a checklist visible while you work in another app. Press your configured shortcut (default **`Ctrl + Alt + G`**) at any time to instantly restore interactivity.
 
 ### Bi-directional Note ↔ Task Linking
 Click any task that has linked notes and a **note-picker popup** appears — listing every linked note by title so you can jump directly to the right one. From the Notes side, use the **Link to tags** panel to attach a note to all tasks of a given category in one click.
@@ -128,8 +128,18 @@ Flip a single toggle in Settings to launch Vellum silently in the background on 
 ## Installation
 
 1. Head to the [**Releases page**](https://github.com/SYcstA/Vellum/releases) and grab the latest `Vellum_0.3.0_x64-setup.exe`.
-2. Run the installer (NSIS, published by **YcstA**).
+2. Run the installer (NSIS). Windows may warn you — see [Unsigned installer](#unsigned-installer-and-windows-warnings) below.
 3. Launch Vellum from the Start menu or pin it to the taskbar.
+
+### Unsigned installer and Windows warnings
+
+The Vellum installer is **not code-signed** (a signing certificate costs money and Vellum is a hobby project). Windows therefore treats it as coming from an unknown publisher:
+
+- **SmartScreen** ("Windows protected your PC"): click **More info → Run anyway**. SmartScreen reputation is per file, so a brand-new release can trigger it even though nothing is wrong.
+- **Smart App Control (SAC)**: if SAC is **On** (Windows Security → App & browser control → Smart App Control), Windows blocks unsigned installers outright, with **no** "Run anyway" button. This is a Windows policy, not a fault in the installer. Vellum does not ask you to turn SAC off; switching it off is permanent until Windows is reset, so decide that for yourself. Instead, build Vellum from source on your own machine (see [Local Development](#local-development)), or wait for a signed release.
+- Antivirus tools may also flag a new unsigned installer. The full source is in this repository, and the installer is produced from a tagged commit by the [release workflow](.github/workflows/release.yml) on GitHub Actions.
+
+Code signing is not set up yet.
 
 **Upgrading from v0.1.0?** Run the new installer over the old one. The NSIS installer detects the existing install, replaces only the binaries, and leaves your data directory (`%APPDATA%\com.osvaldo.vellum\`) untouched. On first launch, v0.2.0 automatically migrates your database (adds the new `Task_Tags` pivot and `Position` ordering columns) — no manual steps needed.
 
