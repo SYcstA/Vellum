@@ -30,7 +30,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-rnd": "^10.5.3",
-    "tinymce": "^8.6.0",
+    "tinymce": "^8.10.2",
     "zustand": "^5.0.16"
   },
   "devDependencies": {

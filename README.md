@@ -172,7 +172,7 @@ npm run tauri build
 | Styling | Tailwind CSS 4 + custom glassmorphism design tokens |
 | State | Zustand 5 (persisted via `localStorage`) |
 | Persistence | SQLite (via `tauri-plugin-sql`) |
-| Rich Text | TinyMCE 8.6 (self-hosted) |
+| Rich Text | TinyMCE 8 (self-hosted) |
 | Drag & Drop | `@hello-pangea/dnd` |
 | Icons | `lucide-react` |
 
