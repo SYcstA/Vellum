@@ -49,7 +49,17 @@ jobs:
             exit 0
           }
           $pfx = Join-Path $env:RUNNER_TEMP "vellum-sign.pfx"
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_BASE64))
+          try {
+            $bytes = [Convert]::FromBase64String($env:PFX_BASE64.Trim())
+          } catch {
+            throw "WINDOWS_CERT_PFX_BASE64 is not valid base64 (length $($env:PFX_BASE64.Length)): $($_.Exception.Message)"
+          }
+          # Sanity check without revealing anything: a PKCS#12 file is a few KB and starts with 0x30.
+          Write-Host ("PFX secret decodes to {0} bytes, first byte 0x{1:X2}; password length {2}" -f $bytes.Length, $bytes[0], $env:PFX_PASSWORD.Length)
+          if ($bytes.Length -lt 1000 -or $bytes[0] -ne 0x30) {
+            throw "WINDOWS_CERT_PFX_BASE64 does not look like a .pfx file. Re-create the secret from the full base64 text of the .pfx."
+          }
+          [IO.File]::WriteAllBytes($pfx, $bytes)
           $secure = ConvertTo-SecureString -String $env:PFX_PASSWORD -AsPlainText -Force
           $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
           Remove-Item $pfx -Force
