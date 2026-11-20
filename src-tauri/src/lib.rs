@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -13,6 +14,10 @@ struct GhostState(Mutex<bool>);
 /// True when this process was started by the Windows scheduled task (`--reminder`):
 /// it should stay hidden, show the deadline toast and exit.
 struct ReminderLaunch(bool);
+/// Set when the user opens Vellum normally while a hidden `--reminder` process is
+/// still alive (it holds the single-instance lock, so the launch is forwarded to
+/// it and its window is shown). The pending auto-exit must then be skipped.
+struct ReminderExitCancelled(AtomicBool);
 /// The currently-registered Ghost-Mode hotkey (user-customizable). The global
 /// shortcut handler compares incoming presses against this so a rebind takes
 /// effect without touching the handler.
@@ -37,6 +42,11 @@ pub fn run() {
         if args.iter().any(|a| a == "--reminder") {
             let _ = app.emit("reminder-check", ());
             return;
+        }
+        // A normal launch was forwarded here: the user wants this window, so a
+        // reminder-only process must not quit it a moment later.
+        if let Some(state) = app.try_state::<ReminderExitCancelled>() {
+            state.0.store(true, Ordering::SeqCst);
         }
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.unminimize();
@@ -112,6 +122,7 @@ pub fn run() {
             app.manage(GhostMenuItem(Mutex::new(ghost_item.clone())));
             app.manage(GhostState(Mutex::new(false)));
             app.manage(ReminderLaunch(std::env::args().any(|a| a == "--reminder")));
+            app.manage(ReminderExitCancelled(AtomicBool::new(false)));
             app.manage(GhostShortcut(Mutex::new(Some(ghost_default.clone()))));
 
             // Clear any zombie registrations from hot-reloads, then register the
@@ -192,6 +203,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update_tray_text,
             kill_app,
+            reminder_exit,
             set_ghost_mode,
             set_ghost_shortcut,
             launched_for_reminder,
@@ -217,6 +229,19 @@ fn update_tray_text(app: tauri::AppHandle, text: String) {
 fn kill_app(app: tauri::AppHandle) {
     let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE);
     std::process::exit(0);
+}
+
+/// End of a `--reminder` run (toast handed to Windows). Quits like `kill_app`,
+/// unless the user opened Vellum meanwhile (see `ReminderExitCancelled`).
+#[tauri::command]
+fn reminder_exit(app: tauri::AppHandle) {
+    let cancelled = app
+        .try_state::<ReminderExitCancelled>()
+        .map(|s| s.0.load(Ordering::SeqCst))
+        .unwrap_or(false);
+    if !cancelled {
+        kill_app(app);
+    }
 }
 
 /// Apply ghost (click-through) mode to the main window, keeping the tray menu

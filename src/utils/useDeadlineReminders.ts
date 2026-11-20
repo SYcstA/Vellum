@@ -5,21 +5,18 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import { useAppStore } from "../store/useAppStore";
 import { localDateStr } from "./date";
 import { decideReminder } from "./reminders";
+import { keyedSingleFlight } from "./singleFlight";
 
 const LAST_KEY = "vellum_last_reminder";
 const STATUS_KEY = "vellum_reminder_status";
 
-let inFlight: Promise<void> | null = null;
-
 /**
  * Send today's summary if the time has passed and none was sent today. Callers
- * can overlap (interval, scheduled-launch path, "reminder-check" event), so
- * concurrent calls share one run: no double toast.
+ * can overlap (interval, scheduled-launch path, "reminder-check" event): calls
+ * with the same time share one run (no double toast); a call with a changed time
+ * runs after it, so it is decided with the new time.
  */
-function checkAndNotify(time: string): Promise<void> {
-  if (!inFlight) inFlight = doCheck(time).finally(() => { inFlight = null; });
-  return inFlight;
-}
+const checkAndNotify = keyedSingleFlight(doCheck);
 
 /** Last outcome, shown in Settings so a silent skip can be explained. */
 function record(msg: string): void {
@@ -92,7 +89,8 @@ export function useDeadlineReminders(): void {
       if (!hidden || stopped) return;
       const { remindersEnabled, reminderTime } = useAppStore.getState();
       if (remindersEnabled) await checkAndNotify(reminderTime);
-      setTimeout(() => { void invoke("kill_app"); }, 4000);
+      // reminder_exit does nothing if the user opened Vellum in the meantime.
+      setTimeout(() => { void invoke("reminder_exit"); }, 4000);
     }).catch(() => { /* not in Tauri */ });
     return () => { stopped = true; };
   }, [loaded]);

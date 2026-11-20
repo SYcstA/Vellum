@@ -5,12 +5,12 @@ function visibleLength(text: string): number {
   return text.replace(/﻿+$/, "").length;
 }
 
-/** True when everything after `node` inside `parent` is only invisible U+FEFF text. */
-function onlyMarkersAfter(node: Node, parent: Node): boolean {
+/** True when everything after `node` among its siblings is only invisible U+FEFF text. */
+function onlyMarkersAfter(node: Node): boolean {
   for (let n = node.nextSibling; n; n = n.nextSibling) {
     if (n.nodeType !== Node.TEXT_NODE || !ZWNBSP.test((n as Text).data)) return false;
   }
-  return parent.nodeType !== undefined;
+  return true;
 }
 
 /**
@@ -32,7 +32,7 @@ export function linkEndingAtCaret(range: Range): HTMLAnchorElement | null {
   while (node) {
     if (node.nodeName === "A") return node as HTMLAnchorElement;
     const parent: Node | null = node.parentNode;
-    if (!parent || !onlyMarkersAfter(node, parent)) return null;
+    if (!parent || !onlyMarkersAfter(node)) return null;
     node = parent;
   }
   return null;
