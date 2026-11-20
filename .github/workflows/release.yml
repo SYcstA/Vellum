@@ -31,10 +31,42 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Optional code signing. Runs only when both repo secrets exist; without
+      # them the build stays unsigned exactly as before.
+      # WINDOWS_CERT_PFX_BASE64 = base64 of the .pfx, WINDOWS_CERT_PASSWORD = its password.
+      # NOTE: a self-signed certificate does NOT satisfy Windows Smart App Control
+      # or SmartScreen; it only signs the files (publisher still "unknown").
+      - name: Import signing certificate (optional)
+        id: cert
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:PFX_BASE64) -or [string]::IsNullOrEmpty($env:PFX_PASSWORD)) {
+            Write-Host "No signing secrets set - building unsigned."
+            "args=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "vellum-sign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_BASE64))
+          $secure = ConvertTo-SecureString -String $env:PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+          Remove-Item $pfx -Force
+          $conf = @{ bundle = @{ windows = @{
+            certificateThumbprint = $cert.Thumbprint
+            digestAlgorithm = "sha256"
+            timestampUrl = "http://timestamp.digicert.com"
+          } } } | ConvertTo-Json -Depth 5
+          Set-Content -Path "src-tauri/tauri.sign.conf.json" -Value $conf -Encoding utf8
+          Write-Host "Signing enabled with certificate $($cert.Subject)"
+          "args=--config src-tauri/tauri.sign.conf.json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          args: ${{ steps.cert.outputs.args }}
           tagName: ${{ github.ref_name }}
           releaseName: "Vellum ${{ github.ref_name }}"
           releaseBody: "See the README for what's new. Installer: Vellum_*_x64-setup.exe"
